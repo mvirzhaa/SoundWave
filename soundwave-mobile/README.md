@@ -23,6 +23,8 @@ expo-speech · expo-file-system · react-native-webview.
 - **Playlist**: Favorit & Terakhir Diputar otomatis, buat/ubah nama/hapus, tambah lagu, Naikkan/Turunkan,
   simpan seluruh playlist untuk offline.
 - **Pemutar**: mini player di atas tab, pemutar penuh (seek, acak, ulangi semua/satu, favorit, antrean).
+- **Lirik karaoke** (tombol **Lirik** di pemutar penuh, atau ucapkan "tampilkan lirik"): dari LRCLIB, cadangan subtitle
+  YouTube. Baris aktif disorot & digulir otomatis, ketuk baris untuk loncat, geser timing ±0,5 detik.
   Tetap berjalan di latar belakang; kontrol play/pause/next/previous di notifikasi & layar kunci.
 - **Perintah suara** (ikon 🎤 di kanan atas atau di pemutar), bahasa Indonesia:
   - "putarkan lagu The Corrs" → semua lagu artis tersebut

@@ -79,6 +79,7 @@
       <div class="full-body">
         <div class="stage" id="stage">
           <span class="cover xl" id="fullCover"></span>
+          <div class="lyrics" id="lyrics" hidden aria-live="off"></div>
           <video id="media" playsinline preload="metadata"></video>
         </div>
         <div class="full-side">
@@ -100,7 +101,10 @@
           <div class="full-extra">
             <label class="vol"><svg viewBox="0 0 24 24"><path class="f" d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg>
               <input type="range" id="volume" min="0" max="1" step="0.01" value="1" aria-label="Volume"></label>
+            <span class="btn-row">
+            <button class="btn" id="lyricsBtn" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 10h10M4 14h12M4 18h7M18 13v6a2 2 0 1 1-2-2h2"/></svg>Lirik</button>
             <button class="btn" id="queueBtn" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 6h12M4 12h12M4 18h8M18 15v6l4-3z"/></svg>Antrean</button>
+            </span>
           </div>
           <div class="queue" id="queue" hidden>
             <div class="queue-head"><b>Antrean</b><button class="link" id="queueClear">Kosongkan berikutnya</button></div>

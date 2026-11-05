@@ -105,4 +105,4 @@ async function suggest(query) {
   return Array.isArray(json[1]) ? json[1].slice(0, 10).map(String) : [];
 }
 
-module.exports = { YTDLP, VIDEO_ID_RE, baseArgs, extractVideoId, search, suggest };
+module.exports = { YTDLP, VIDEO_ID_RE, baseArgs, extractVideoId, search, suggest, runJson };

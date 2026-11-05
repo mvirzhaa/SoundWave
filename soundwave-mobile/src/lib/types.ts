@@ -56,7 +56,7 @@ export type VoiceResult = {
   label?: string;
   shuffle?: boolean;
   tracks?: Track[];
-  command?: 'pause' | 'resume' | 'next' | 'previous';
+  command?: 'pause' | 'resume' | 'next' | 'previous' | 'lyrics';
   playlist?: { id: number; name: string };
   added?: number;
   message: string;

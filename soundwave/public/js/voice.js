@@ -4,7 +4,8 @@
  */
 import { h, icon, toast, openOverlay, closeOverlay } from './ui.js';
 import { post } from './api.js';
-import { playList, pause, resume, next, prev } from './player.js';
+import { playList, pause, resume, next, prev, openFull, current } from './player.js';
+import { toggleLyrics } from './lyrics.js';
 import { invalidateTracks } from './store.js';
 import { localSummary, localById } from './local.js';
 
@@ -30,7 +31,8 @@ export async function runCommand(text, statusEl) {
       r.tracks = r.tracks.map((t) => (t.local && localById(t.id)) || t);
       playList(r.tracks, r.shuffle ? null : 0, { shuffle: r.shuffle, source: r.label });
     } else if (r.action === 'control') {
-      ({ pause, resume, next: () => next(false), previous: prev })[r.command]?.();
+      ({ pause, resume, next: () => next(false), previous: prev,
+        lyrics: () => { if (!current()) { toast('Belum ada lagu yang diputar.'); return; } openFull(); toggleLyrics(true); } })[r.command]?.();
     } else if (r.action === 'playlist_created' || r.action === 'added') {
       invalidateTracks();
     }

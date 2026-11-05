@@ -66,6 +66,7 @@ const CONTROLS = [
   [/^(?:lanjut(?:kan)?|resume|teruskan|putar lagi|lanjut putar)(?:\s+(?:lagu|musik))*$/, 'resume'],
   [/^(?:(?:lagu\s+)?(?:berikutnya|selanjutnya)|next|skip|lewati|ganti lagu)(?:\s+lagu)?$/, 'next'],
   [/^(?:(?:lagu\s+)?sebelumnya|previous|kembali)(?:\s+lagu)?$/, 'previous'],
+  [/^(?:tampilkan|tunjukkan|buka|lihat|munculkan)\s+(?:teks\s+)?(?:lirik|lyrics?)(?:\s+lagu(?:\s+ini)?)?$|^lirik(?:nya)?$/, 'lyrics'],
 ];
 
 const SHUFFLE_WORDS = /\s*\b(?:secara\s+)?(?:acak|random|shuffle|diacak)\b\s*/g;

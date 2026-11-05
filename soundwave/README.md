@@ -40,6 +40,8 @@ soundwave/
     buka di Drive, pindahkan ke Sampah Drive.
 - **Pemutar**: mini player + pemutar penuh (seek, acak, ulangi semua/satu, favorit, antrean, volume),
   MP4 tampil sebagai video, kontrol media keyboard & layar kunci (Media Session API), sesi terakhir dipulihkan.
+- **Lirik karaoke** di pemutar penuh (tombol **Lirik**): baris yang sedang dinyanyikan disorot & digulir otomatis,
+  klik baris untuk loncat, geser timing ±0,5 detik bila lirik terlalu cepat/lambat (diingat per lagu).
 - **Akun**: hubungkan Google Drive, tempel link folder (atau buat folder "SoundWave"), ganti sandi,
   keluar dari semua perangkat.
 - **Perintah suara** (ikon mikrofon; Chrome/Edge/Safari) — logika sama dengan aplikasi mobile.
@@ -60,10 +62,25 @@ untuk dibacakan.
 | "masukkan lagu Dewa ke playlist kenangan" | menambahkan **semua** lagu artis Dewa (juga "Dewa 19") |
 | "masukkan lagu fly me to the moon ke playlist kenangan" | menambahkan **satu** lagu berdasarkan judul |
 | "lagu berikutnya", "sebelumnya", "jeda", "lanjutkan" | kontrol pemutar |
+| "tampilkan lirik" | membuka lirik lagu yang sedang diputar |
 
 Perintah suara mencari di **Google Drive + folder lokal/HP** sekaligus (klien mengirim metadata lagu lokalnya, bukan
 file-nya). Urutan pencocokan untuk "putarkan lagu X": **artis → genre → nama playlist → judul**. Jika playlist tujuan
 "masukkan … ke playlist Y" belum ada, playlist dibuat otomatis.
+
+### Lirik
+
+`GET /api/lyrics?title=&artist=&album=&duration=&ytId=` mencari berurutan:
+
+1. **LRCLIB** (lrclib.net, gratis tanpa API key) — dicocokkan dengan artis + judul + durasi; berlaku juga untuk lagu
+   lokal (hanya metadata yang dikirim).
+2. **Subtitle YouTube** (untuk lagu yang punya ID video, mis. hasil unduhan SoundWave) — subtitle unggahan pemilik
+   video dalam **bahasa asli lagu** (bukan terjemahan); bila tidak ada, subtitle otomatis YouTube ditandai
+   "mungkin kurang akurat".
+
+Hasil disimpan di database; "tidak ditemukan" dicoba ulang setelah 3 hari, atau segera lewat tombol **Cari ulang**.
+Matikan sumber YouTube dengan `LYRICS_YOUTUBE=false`. Perintah suara: "tampilkan lirik".
+Lirik dilindungi hak cipta — tampilkan untuk pemutaran pribadi, jangan sediakan unduh/bagikan publik.
 
 ### Genre
 
@@ -143,6 +160,7 @@ POST/PUT/PATCH/DELETE) atau `Authorization: Bearer <token>` (mobile). Streaming/
 | POST · DELETE · PUT | `/api/library/playlists/:id/items` · `/items/:itemId` · `/order` | tambah · hapus · urutkan |
 | PUT/DELETE | `/api/library/favorites/:fileId` | favorit |
 | POST | `/api/voice` `{text}` | perintah suara |
+| GET | `/api/lyrics?title=&artist=&duration=&ytId=` | lirik tersinkron (LRCLIB → subtitle YouTube) |
 | GET | `/api/search?q=` · `/api/suggest?q=` | pencarian YouTube |
 | POST | `/api/convert` → GET `/api/jobs/:id` → `/file` · POST `/drive` | konversi, unduh, simpan ke Drive |
 

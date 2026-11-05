@@ -6,6 +6,7 @@ import { h, icon, I, fillCover, fmtDur, toast, actionMenu } from './ui.js';
 import { apiUrl } from './api.js';
 import { store, on, emit, toggleFavorite, recordPlay } from './store.js';
 import { getLocalFile, coverUrl, localById } from './local.js';
+import { initLyrics } from './lyrics.js';
 
 const $ = (id) => document.getElementById(id);
 const media = $('media');
@@ -173,6 +174,7 @@ function cycleRepeat() {
 function updateNowPlaying() {
   const t = current();
   if (!t) return;
+  emit('player:track', t);
   mini.hidden = false;
   document.body.classList.add('has-mini');
   $('miniTitle').textContent = t.title;
@@ -261,6 +263,7 @@ export function closeFull() {
 
 /* ---------- Event ---------- */
 export function initPlayer({ trackMenu }) {
+  initLyrics({ media, current });
   document.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', (e) => {
     e.stopPropagation();
     ({ toggle, next: () => next(false), prev })[b.dataset.act]?.();

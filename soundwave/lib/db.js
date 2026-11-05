@@ -66,6 +66,13 @@ CREATE TABLE IF NOT EXISTS track_meta (
   updated_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS lyrics (
+  key TEXT PRIMARY KEY,            -- yt:<videoId> | m:<artis>|<judul>
+  found INTEGER NOT NULL,
+  data TEXT,                       -- JSON { source, synced, lines, plain, lang, auto }
+  updated_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS recent_plays (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   file_id TEXT NOT NULL,

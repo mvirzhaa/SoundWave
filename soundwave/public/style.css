@@ -407,6 +407,33 @@ body.has-mini .fab { bottom: calc(var(--mini-h) + 20px); }
   .full-side { justify-self: start; }
 }
 
+/* Lirik karaoke */
+.stage.show-lyrics .cover, .stage.show-lyrics #media { display: none !important; }
+.lyrics {
+  width: min(560px, 100%); height: min(62vh, 560px); overflow-y: auto; position: relative;
+  padding: 8px 4px 40vh; scroll-behavior: smooth; scrollbar-width: thin;
+  mask-image: linear-gradient(transparent 0, #000 8%, #000 80%, transparent 100%);
+}
+.lyrics-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 4px 10px; font-size: 12px; color: var(--muted); }
+.lyrics-head small { margin-right: auto; }
+.lyrics-tools { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: 999px; padding: 0 4px; }
+.lyrics-tools .icon-btn { width: 28px; height: 28px; font-weight: 700; font-size: 16px; }
+.lyrics-tools .off { min-width: 54px; text-align: center; font-variant-numeric: tabular-nums; }
+.lyrics-lines p {
+  margin: 0; padding: 8px 6px; border-radius: 10px; cursor: pointer;
+  font-size: clamp(20px, 3.2vw, 28px); font-weight: 800; line-height: 1.3; letter-spacing: -.01em;
+  color: color-mix(in srgb, var(--text) 38%, transparent); transition: color .25s, transform .25s;
+  transform-origin: left center;
+}
+.lyrics-lines p:hover { color: color-mix(in srgb, var(--text) 70%, transparent); }
+.lyrics-lines p.active { color: var(--text); transform: scale(1.03); }
+.lyrics-plain { white-space: pre-wrap; font: inherit; font-size: 18px; line-height: 1.7; margin: 0; padding: 0 6px; }
+.lyrics-msg { color: var(--muted); text-align: center; margin-top: 30%; }
+.lyrics-empty { display: grid; justify-items: center; gap: 8px; text-align: center; margin-top: 22%; color: var(--muted); }
+.lyrics-empty svg { width: 40px; height: 40px; }
+.lyrics-empty p { margin: 0; color: var(--text); font-weight: 600; }
+.full-extra .btn-row { gap: 8px; }
+
 /* ================= Overlay, sheet, dialog ================= */
 .overlay { position: fixed; inset: 0; z-index: 80; background: rgba(5, 8, 22, .55); display: grid; place-items: center; padding: 16px; animation: fade .15s; }
 @keyframes fade { from { opacity: 0; } }

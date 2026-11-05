@@ -95,6 +95,13 @@ export default function VoiceScreen() {
         else if (r.command === 'resume') player.resume();
         else if (r.command === 'next') { player.next(); if (wasPlaying.current) player.resume(); }
         else if (r.command === 'previous') { player.prev(); if (wasPlaying.current) player.resume(); }
+        else if (r.command === 'lyrics') {
+          if (wasPlaying.current) player.resume();
+          if (!player.current) { setStatus('Belum ada lagu yang diputar.'); return; }
+          router.back();
+          setTimeout(() => router.push({ pathname: '/player', params: { lyrics: '1' } }), 350);
+          return;
+        }
         setTimeout(() => router.back(), 500);
         return;
       }

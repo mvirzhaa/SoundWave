@@ -3,13 +3,14 @@ import React, { useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { usePlayer } from '../lib/player';
 import { useLibrary } from '../lib/library';
 import { useUi } from '../lib/ui';
 import { useTrackMenu } from '../components/TrackMenu';
 import { Cover } from '../components/Cover';
 import { SeekBar } from '../components/Common';
+import { Lyrics } from '../components/Lyrics';
 import { isOffline } from '../lib/offline';
 import { C, fmtDur } from '../lib/theme';
 
@@ -19,7 +20,10 @@ export default function PlayerScreen() {
   const ui = useUi();
   const menu = useTrackMenu();
   const { width } = useWindowDimensions();
-  const [showQueue, setShowQueue] = useState(false);
+  const params = useLocalSearchParams<{ lyrics?: string }>();
+  const [view, setView] = useState<'art' | 'queue' | 'lyrics'>(params.lyrics === '1' ? 'lyrics' : 'art');
+  const showQueue = view === 'queue';
+  const toggleView = (v: 'queue' | 'lyrics') => setView((cur) => (cur === v ? 'art' : v));
   const t = p.current;
 
   if (!t) {
@@ -44,7 +48,9 @@ export default function PlayerScreen() {
         <Pressable onPress={() => menu.open(t, { fromPlayer: true })} style={s.iconBtn} accessibilityLabel="Menu"><Ionicons name="ellipsis-vertical" size={22} color={C.text} /></Pressable>
       </View>
 
-      {showQueue ? (
+      {view === 'lyrics' ? (
+        <View style={{ flex: 1, marginTop: 8 }}><Lyrics track={t} /></View>
+      ) : showQueue ? (
         <FlatList
           style={{ flex: 1, marginTop: 8 }}
           data={p.queue}
@@ -106,13 +112,16 @@ export default function PlayerScreen() {
       </View>
 
       <View style={s.bottom}>
-        <Pressable style={[s.pill, showQueue && { borderColor: C.accent }]} onPress={() => setShowQueue((v) => !v)}>
+        <Pressable style={[s.pill, view === 'lyrics' && { borderColor: C.accent }]} onPress={() => toggleView('lyrics')}>
+          <Ionicons name="document-text-outline" size={18} color={view === 'lyrics' ? C.accent : C.text} />
+          <Text style={[s.pillText, view === 'lyrics' && { color: C.accent }]}>Lirik</Text>
+        </Pressable>
+        <Pressable style={[s.pill, showQueue && { borderColor: C.accent }]} onPress={() => toggleView('queue')}>
           <Ionicons name="list" size={18} color={showQueue ? C.accent : C.text} />
           <Text style={[s.pillText, showQueue && { color: C.accent }]}>Antrean</Text>
         </Pressable>
-        <Pressable style={s.pill} onPress={() => router.push('/voice')}>
+        <Pressable style={s.pill} onPress={() => router.push('/voice')} accessibilityLabel="Perintah suara">
           <Ionicons name="mic" size={18} color={C.accent} />
-          <Text style={s.pillText}>Perintah suara</Text>
         </Pressable>
       </View>
     </SafeAreaView>
