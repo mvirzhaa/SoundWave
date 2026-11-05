@@ -14,7 +14,7 @@ import { useUi } from '../../lib/ui';
 import { downloadOffline, isOffline, offlineTracks, removeOffline } from '../../lib/offline';
 import { TrackRow } from '../../components/TrackRow';
 import { useTrackMenu } from '../../components/TrackMenu';
-import { Collage } from '../../components/Cover';
+import { Collage, Cover } from '../../components/Cover';
 import { Button, Empty } from '../../components/Common';
 import { C } from '../../lib/theme';
 import type { PlaylistSummary, Track } from '../../lib/types';
@@ -208,10 +208,11 @@ export default function LibraryScreen() {
             <Text style={s.plName}>Playlist baru</Text>
           </Pressable>
           {all.map((p) => (
-            <Pressable key={String(p.id)} style={{ width: size }} onPress={() => router.push(`/playlist/${p.id}`)}>
-              <Collage ids={p.covers} size={size} icon={p.id === 'favorites' ? 'heart' : p.id === 'recent' ? 'time-outline' : 'musical-notes'} />
+            <Pressable key={String(p.id)} style={{ width: size }} onPress={() => router.push(p.quran ? '/quran' : `/playlist/${p.id}`)}>
+              {p.quran ? <Cover quran="القرآن" size={size} radius={14} />
+                : <Collage ids={p.covers} size={size} icon={p.id === 'favorites' ? 'heart' : p.id === 'recent' ? 'time-outline' : 'musical-notes'} />}
               <Text style={s.plName} numberOfLines={1}>{p.name}</Text>
-              <Text style={s.plCount}>{p.count} lagu</Text>
+              <Text style={s.plCount}>{p.count} {p.quran ? 'surat' : 'lagu'}</Text>
             </Pressable>
           ))}
         </View>

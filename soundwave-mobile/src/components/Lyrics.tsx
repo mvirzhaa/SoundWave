@@ -34,6 +34,54 @@ function saveOffset(id: string, v: number) {
 const ROW_H = 52;
 
 export function Lyrics({ track }: { track: Track }) {
+  if (track.quran) return <QuranText track={track} />;
+  return <SongLyrics track={track} />;
+}
+
+/* ---------- Teks Al-Qur'an (murottal) ---------- */
+type Ayat = { nomorAyat: number; teksArab: string; teksLatin: string; teksIndonesia: string };
+type Surat = { nomor: number; namaLatin: string; arti: string; jumlahAyat: number; ayat: Ayat[] };
+const suratCache = new Map<number, Surat>();
+
+function QuranText({ track }: { track: Track }) {
+  const n = track.quran!.surat;
+  const active = track.quran!.ayat || 0;
+  const [data, setData] = useState<Surat | null>(suratCache.get(n) || null);
+  const [err, setErr] = useState('');
+  const listRef = useRef<FlatList<Ayat>>(null);
+  const load = () => {
+    setErr('');
+    get<Surat>(`/api/quran/surat/${n}`, { timeout: 30000 }).then((r) => { suratCache.set(n, r); setData(r); }).catch((e) => setErr(e.message));
+  };
+  useEffect(() => { const c = suratCache.get(n); if (c) setData(c); else { setData(null); load(); } }, [n]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (data && active > 0) setTimeout(() => listRef.current?.scrollToIndex({ index: active - 1, viewPosition: 0.2, animated: true }), 250);
+  }, [data, active]);
+  if (err) return <Center icon="cloud-offline-outline" text={err} onRetry={load} />;
+  if (!data) return <View style={s.center}><ActivityIndicator color={C.accent} /><Text style={s.muted}>Memuat teks surat…</Text></View>;
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={s.head}><Text style={s.source} numberOfLines={1}>{data.namaLatin} · {data.arti} · {data.jumlahAyat} ayat — teks & terjemahan Kemenag RI</Text></View>
+      <FlatList
+        ref={listRef}
+        data={data.ayat}
+        keyExtractor={(a) => String(a.nomorAyat)}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 200, gap: 6 }}
+        onScrollToIndexFailed={() => {}}
+        renderItem={({ item }) => (
+          <View style={[s.ayat, item.nomorAyat === active && s.ayatOn]}>
+            <Text style={s.arab}>{item.teksArab} <Text style={{ color: C.ok, fontSize: 20 }}>﴿{item.nomorAyat.toLocaleString('ar-EG')}﴾</Text></Text>
+            <Text style={s.latin}>{item.teksLatin}</Text>
+            <Text style={s.arti}><Text style={{ fontWeight: '800' }}>{item.nomorAyat}. </Text>{item.teksIndonesia}</Text>
+          </View>
+        )}
+        extraData={active}
+      />
+    </View>
+  );
+}
+
+function SongLyrics({ track }: { track: Track }) {
   const p = usePlayer();
   const [data, setData] = useState<LyricsData | null>(null);
   const [err, setErr] = useState('');
@@ -147,4 +195,9 @@ const s = StyleSheet.create({
   line: { color: 'rgba(232,235,255,.36)', fontSize: 24, fontWeight: '800', lineHeight: 31, paddingVertical: 8, minHeight: ROW_H },
   lineOn: { color: C.text },
   plain: { color: C.text, fontSize: 18, lineHeight: 30 },
+  ayat: { padding: 12, borderRadius: 14, borderWidth: 1, borderColor: 'transparent' },
+  ayatOn: { borderColor: 'rgba(52,211,153,.5)', backgroundColor: 'rgba(52,211,153,.1)' },
+  arab: { color: C.text, fontSize: 28, lineHeight: 52, textAlign: 'right', writingDirection: 'rtl' },
+  latin: { color: C.accent2, fontStyle: 'italic', fontSize: 14, lineHeight: 20, marginTop: 6 },
+  arti: { color: C.muted, fontSize: 14, lineHeight: 21, marginTop: 4 },
 });

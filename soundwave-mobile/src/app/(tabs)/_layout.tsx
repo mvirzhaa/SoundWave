@@ -39,6 +39,7 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ title: 'Cari', tabBarIcon: ({ color, size }) => <Ionicons name="search" color={color as string} size={size} /> }} />
       <Tabs.Screen name="library" options={{ title: 'Pustaka', tabBarIcon: ({ color, size }) => <Ionicons name="musical-notes" color={color as string} size={size} /> }} />
+      <Tabs.Screen name="sholat" options={{ title: 'Sholat', tabBarIcon: ({ color, size }) => <Ionicons name="moon-outline" color={color as string} size={size} /> }} />
       <Tabs.Screen name="account" options={{ title: 'Akun', tabBarIcon: ({ color, size }) => <Ionicons name="person-circle-outline" color={color as string} size={size} /> }} />
     </Tabs>
   );

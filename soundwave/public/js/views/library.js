@@ -3,6 +3,7 @@ import { h, icon, I, cover, collage, fmtDur, toast, actionMenu, promptDialog, co
 import { get, post, put, patch, del } from '../api.js';
 import { store, on, loadTracks, driveReady, toggleFavorite } from '../store.js';
 import { playList, playNext, addToQueue, current } from '../player.js';
+import { savePrefs as saveSholatPrefs } from '../sholat.js';
 import { localState, fsaSupported, pickFolder, reconnect, rescan, forgetFolder, setLocalGenre, localById } from '../local.js';
 
 const TABS = [['lagu', 'Lagu'], ['playlist', 'Playlist'], ['artis', 'Artis'], ['genre', 'Genre']];
@@ -57,8 +58,12 @@ export function trackMenu(t, ctx = {}) {
     { label: fav ? 'Hapus dari Favorit' : 'Tambah ke Favorit', icon: I.heart, run: async () => {
       try { const f = await toggleFavorite(t); toast(f ? 'Ditambahkan ke Favorit' : 'Dihapus dari Favorit'); ctx.onChange?.(); } catch (e) { toast(e.message, { type: 'error' }); }
     } },
-    t.artist && t.artist !== 'Tidak diketahui' && { label: `Lihat artis: ${t.artist}`, icon: I.user, run: () => { location.hash = '#/artis/' + encodeURIComponent(t.artist); } },
-    { label: `Ubah genre${t.genre ? ` (${t.genre})` : ''}`, icon: 'M4 7h16M4 12h10M4 17h6', run: () => editGenre(t, ctx) },
+    !t.quran && t.artist && t.artist !== 'Tidak diketahui' && { label: `Lihat artis: ${t.artist}`, icon: I.user, run: () => { location.hash = '#/artis/' + encodeURIComponent(t.artist); } },
+    t.quran && !t.quran.ayat && { label: 'Hafalan per ayat…', icon: 'M4 6h16M4 10h10M4 14h12M17 17l2 2 3-4', run: () => hafalanMenu(t) },
+    !t.quran && { label: `Ubah genre${t.genre ? ` (${t.genre})` : ''}`, icon: 'M4 7h16M4 12h10M4 17h6', run: () => editGenre(t, ctx) },
+    !t.quran && { label: 'Jadikan suara adzan', icon: 'M12 3c3 2 5 4.5 5 8H7c0-3.5 2-6 5-8zM5 11h14v10H5z', run: async () => {
+      try { await saveSholatPrefs({ sholat: { adzan: { suara: { jenis: 'lagu', id: t.id, title: t.title, local: Boolean(t.local) } } } }); toast(`“${t.title}” dipakai sebagai suara adzan`); } catch (e) { toast(e.message, { type: 'error' }); }
+    } },
     pl && ctx.index > 0 && { label: 'Naikkan', icon: 'M12 19V5M6 11l6-6 6 6', run: () => move(pl, ctx.index, -1, ctx) },
     pl && ctx.index < ctx.list.length - 1 && { label: 'Turunkan', icon: 'M12 5v14M6 13l6 6 6-6', run: () => move(pl, ctx.index, 1, ctx) },
     pl && { label: `Hapus dari “${pl.name}”`, icon: 'M5 12h14', run: async () => {
@@ -66,8 +71,8 @@ export function trackMenu(t, ctx = {}) {
       ctx.onChange?.();
     } },
     t.local && t.path && { label: `Lokasi: ${t.path}`, icon: 'M3 7h6l2 2h10v10H3z', run: () => toast(t.path) },
-    !t.local && { label: 'Buka di Google Drive', icon: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5', run: () => window.open(`https://drive.google.com/file/d/${t.id}/view`, '_blank', 'noopener') },
-    !t.local && { label: 'Hapus dari Google Drive', icon: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3', danger: true, run: async () => {
+    !t.local && !t.quran && { label: 'Buka di Google Drive', icon: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5', run: () => window.open(`https://drive.google.com/file/d/${t.id}/view`, '_blank', 'noopener') },
+    !t.local && !t.quran && { label: 'Hapus dari Google Drive', icon: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3', danger: true, run: async () => {
       if (!(await confirmDialog('Hapus dari Google Drive?', `“${t.name || t.title}” akan dipindahkan ke Sampah Google Drive.`, { ok: 'Pindahkan ke Sampah', danger: true }))) return;
       try {
         await del(`/api/library/tracks/${t.id}`);
@@ -307,8 +312,9 @@ export async function renderLibrary(view, params) {
     }, h('span.cover.md.gen.plus', {}, icon(I.plus)), h('b', { text: 'Playlist baru' })));
     [...data.special, ...data.playlists].filter((p) => !f || norm(p.name).includes(f)).forEach((p) => grid.append(
       h('a.pl-card', { href: `#/playlist/${p.id}` },
-        collage(p.covers, 'md', p.id === 'favorites' ? I.heart : p.id === 'recent' ? I.clock : I.note),
-        h('b', { text: p.name }), h('small', { text: `${p.count} lagu` }))));
+        p.quran ? h('span.cover.md.gen.quran-cover', {}, h('span.qnum', { text: 'القرآن', lang: 'ar' }))
+          : collage(p.covers, 'md', p.id === 'favorites' ? I.heart : p.id === 'recent' ? I.clock : I.note),
+        h('b', { text: p.name }), h('small', { text: `${p.count} ${p.quran ? 'surat' : 'lagu'}` }))));
     box.append(grid);
   }
 
@@ -320,9 +326,80 @@ export async function renderLibrary(view, params) {
   return () => offs.forEach((off) => off());
 }
 
-/* ================= Detail playlist ================= */
+/* ================= Hapalan Quran ================= */
+
+/** Pilih jumlah pengulangan lalu putar surat ayat demi ayat. */
+export function hafalanMenu(t) {
+  const run = async (ulang) => {
+    try {
+      const qari = t.id.split('-')[1];
+      const r = await get(`/api/quran/hafalan/${t.quran.surat}?qari=${qari}&ulang=${ulang}`);
+      playList(r.items, 0, { shuffle: false, source: `Hafalan ${r.surat.namaLatin}` });
+      toast(`Hafalan ${r.surat.namaLatin}: tiap ayat diulang ${ulang}×`);
+    } catch (e) { toast(e.message, { type: 'error' }); }
+  };
+  actionMenu(`Hafalan per ayat · ${t.title}`, [1, 3, 5, 7].map((n) => ({ label: n === 1 ? 'Putar per ayat (tanpa ulang)' : `Ulangi tiap ayat ${n}×`, icon: I.refresh, run: () => run(n) })),
+    'Audio diputar ayat demi ayat; teks ayat tampil di panel Lirik.');
+}
+
+async function renderQuran(view) {
+  const page = h('section.page');
+  view.append(page);
+  const load = async (q = {}) => {
+    page.textContent = '';
+    page.append(h('p.state', { text: 'Memuat daftar surat…' }));
+    let p;
+    try {
+      const qs = new URLSearchParams();
+      if (q.qari) qs.set('qari', q.qari);
+      if (q.semua != null) qs.set('semua', q.semua ? '1' : '0');
+      p = await get(`/api/library/playlists/quran?${qs}`);
+    } catch (e) { page.textContent = ''; page.append(h('p.state.err', { text: e.message })); return; }
+    page.textContent = '';
+    const sel = h('select.sort', { 'aria-label': 'Qari' }, p.qariList.map((x) => h('option', { value: x.id, text: x.name, selected: x.id === p.qari })));
+    sel.addEventListener('change', async () => { await saveSholatPrefs({ quran: { qari: sel.value } }).catch(() => {}); load({ qari: sel.value, semua: p.semua }); });
+    const scope = h('div.sources', {}, [['juz30', 'Juz 30 + Al-Fatihah', false], ['semua', 'Semua 114 surat', true]].map(([, label, v]) => h('button.chip-src', {
+      type: 'button', role: 'radio', 'aria-checked': String(Boolean(p.semua) === v), text: label,
+      onclick: async () => { await saveSholatPrefs({ quran: { semua: v } }).catch(() => {}); load({ qari: p.qari, semua: v }); },
+    })));
+    const filter = h('input.filter', { type: 'search', placeholder: 'Cari surat…' });
+    const listBox = h('div');
+    const drawList = () => {
+      const f = norm(filter.value);
+      const items = f ? p.items.filter((x) => norm(`${x.title} ${x.quran.arti} ${x.quran.surat}`).includes(f)) : p.items;
+      listBox.textContent = '';
+      listBox.append(trackList(items, { source: 'Hapalan Quran', playlist: p, onChange: () => load({ qari: p.qari, semua: p.semua }) }));
+      listBox.querySelectorAll('.track').forEach((row, i) => {
+        const it = items[i];
+        row.querySelector('.track-text small').textContent = `${it.quran.arti} · ${it.quran.jumlahAyat} ayat · ${it.quran.tempatTurun}`;
+        row.querySelector('.track-text').after(h('span.arab', { text: it.quran.nama, lang: 'ar', dir: 'rtl' }));
+      });
+    };
+    filter.addEventListener('input', drawList);
+    page.append(
+      h('a.back', { href: '#/pustaka?tab=playlist' }, icon(I.back), 'Playlist'),
+      h('div.detail-head', {},
+        h('span.cover.lg.gen.quran-cover', {}, h('span.qnum', { text: 'القرآن', lang: 'ar' })),
+        h('div.detail-info', {},
+          h('small.eyebrow', { text: 'Playlist bawaan' }),
+          h('h2', { text: 'Hapalan Quran' }),
+          h('p.muted', { text: `${p.items.length} surat · Murottal ${p.qariList.find((x) => x.id === p.qari)?.name || ''}` }),
+          h('div.detail-actions', {},
+            h('button.btn-primary', { type: 'button', onclick: () => playList(p.items, 0, { shuffle: false, source: 'Hapalan Quran' }) }, icon(I.play), 'Putar'),
+            h('button.btn', { type: 'button', onclick: () => playList(p.items, null, { shuffle: true, source: 'Hapalan Quran' }) }, icon(I.shuffle), 'Acak')))),
+      h('div.lib-tools', {}, h('label.qari', {}, h('span', { text: 'Qari' }), sel)),
+      scope,
+      h('div.lib-tools', {}, filter),
+      h('p.hint', { text: 'Tips hafalan: menu ⋮ → "Hafalan per ayat" untuk mengulang tiap ayat, dan tombol Lirik di pemutar untuk melihat teks Arab, Latin, dan terjemahan.' }),
+      listBox,
+      h('p.hint', { text: "Teks Al-Qur'an & terjemahan: Kemenag RI. Audio murottal: everyayah.com, melalui equran.id." }));
+    drawList();
+  };
+  await load();
+}
 
 export async function renderPlaylist(view, id) {
+  if (id === 'quran') return renderQuran(view);
   const page = h('section.page');
   view.append(page);
   const reload = async () => {

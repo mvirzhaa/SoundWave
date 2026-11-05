@@ -21,7 +21,7 @@ function Row({ track: t, active, favorite, onPress, onMore, onOffline, showSourc
   const busy = isDownloading(t.id);
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [s.row, pressed && { backgroundColor: C.surface }, t.available === false && { opacity: 0.45 }]}>
-      <Cover ytId={t.ytId} uri={t.coverUri} seed={t.artist + t.title} size={50} />
+      <Cover ytId={t.ytId} uri={t.coverUri} quran={t.quran?.surat} seed={t.artist + t.title} size={50} />
       <View style={s.text}>
         <Text style={[s.title, active && { color: C.accent }]} numberOfLines={1}>
           {t.title}{t.isVideo ? '  ' : ''}{t.isVideo ? <Text style={s.badge}> MP4 </Text> : null}

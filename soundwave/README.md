@@ -45,6 +45,15 @@ soundwave/
 - **Akun**: hubungkan Google Drive, tempel link folder (atau buat folder "SoundWave"), ganti sandi,
   keluar dari semua perangkat.
 - **Perintah suara** (ikon mikrofon; Chrome/Edge/Safari) — logika sama dengan aplikasi mobile.
+- **Hapalan Quran** (playlist bawaan di Pustaka → Playlist): murottal Juz 30 + Al-Fatihah atau seluruh 114 surat,
+  6 pilihan qari, cari surat, dan menu ⋮ → **Hafalan per ayat** (tiap ayat diulang 1/3/5/7×).
+  Tombol **Lirik** di pemutar menampilkan teks Arab, Latin, dan terjemahan Kemenag; ayat yang sedang diputar disorot.
+- **Sholat** (menu baru): **pilih wilayah secara manual** dari ±500 kabupaten/kota (data resmi Kemenag RI),
+  hitung mundur ke waktu berikutnya, jadwal hari ini (Imsak–Isya), lonceng adzan per waktu, volume, jeda musik
+  saat adzan, uji suara, notifikasi browser. Chip "Maghrib 17.49 · 1 j 5 m lagi" tampil di bilah atas.
+  Adzan diputar otomatis saat masuk waktu **selama tab SoundWave terbuka**; musik dijeda lalu dilanjutkan.
+  Suara adzan bisa diganti dengan lagu/file apa pun dari pustaka (menu ⋮ → **Jadikan suara adzan**).
+  Wilayah & pengaturan adzan tersimpan di akun, jadi sama di web dan HP.
 
 ## Perintah suara
 
@@ -89,6 +98,20 @@ Lagu di Drive umumnya tidak punya data genre, jadi server mengisinya **otomatis 
 API (gratis, tanpa key, 1 permintaan per 3 detik) berdasarkan artis + judul, lalu menyimpannya di database.
 Genre bisa diubah manual lewat menu ⋮ → **Ubah genre** (perubahan manual tidak ditimpa). Matikan pencarian
 otomatis dengan `GENRE_LOOKUP=false`.
+
+### Jadwal sholat & suara adzan
+
+- Jadwal resmi diambil dari **API MyQuran** (data Bimas Islam Kemenag RI) per kabupaten/kota, di-cache 7 hari.
+  Bila MyQuran tidak terjangkau dan koordinat HP diketahui, server menghitung sendiri (Subuh 20°, Isya 18°,
+  Ashar Syafi'i, ihtiyat +2 menit — parameter yang lazim dipakai Kemenag).
+- Mode **Lokasi HP** (dari aplikasi mobile) menyimpan koordinat GPS dan mencocokkannya ke kabupaten/kota Kemenag.
+  Di web, memilih wilayah akan beralih ke mode manual.
+- **Suara adzan bawaan** tidak disertakan (hak cipta rekaman). Letakkan file sendiri di folder `data/`:
+  `adzan.mp3` (dipakai semua waktu) dan opsional `adzan-subuh.mp3` (adzan Subuh dengan *ash-shalatu khairum
+  minan naum*). Atau isi `ADZAN_URL` / `ADZAN_SUBUH_URL` di `.env` agar diunduh otomatis sekali — rekaman
+  berlisensi bebas tersedia mis. di Wikimedia Commons (Category:Adhan). Tanpa file itu, pengguna tetap bisa
+  memilih lagu/file adzan dari pustakanya sendiri.
+- Teks Al-Qur'an, terjemahan, dan audio murottal dari **equran.id** (API v2), di-cache di server.
 
 ## Menjalankan di Windows
 
@@ -161,8 +184,16 @@ POST/PUT/PATCH/DELETE) atau `Authorization: Bearer <token>` (mobile). Streaming/
 | PUT/DELETE | `/api/library/favorites/:fileId` | favorit |
 | POST | `/api/voice` `{text}` | perintah suara |
 | GET | `/api/lyrics?title=&artist=&duration=&ytId=` | lirik tersinkron (LRCLIB → subtitle YouTube) |
+| GET | `/api/library/playlists/quran?qari=05&semua=0` | playlist Hapalan Quran |
+| GET | `/api/quran/surat` · `/surat/:n` · `/hafalan/:n?qari=&ulang=3` | daftar surat · teks + audio · antrean per ayat |
+| GET | `/api/sholat/kota?q=` · `/kota/cocok?subregion=&city=` | cari kabupaten/kota · cocokkan hasil GPS |
+| GET | `/api/sholat/jadwal?tahun=&bulan=` (`&kota=` atau `&lat=&lon=&tz=`) | jadwal sebulan (default: wilayah tersimpan) |
+| GET/PUT | `/api/sholat/pengaturan` | wilayah, adzan, qari (dipakai bersama web & mobile) |
+| GET | `/api/sholat/adzan` · `/adzan/umum` · `/adzan/subuh` | status · file suara adzan bawaan |
 | GET | `/api/search?q=` · `/api/suggest?q=` | pencarian YouTube |
 | POST | `/api/convert` → GET `/api/jobs/:id` → `/file` · POST `/drive` | konversi, unduh, simpan ke Drive |
+
+Perintah suara tambahan: "putar surat Al-Mulk", "putarkan hapalan quran", "jadwal sholat", "kapan maghrib".
 
 ## Keamanan
 

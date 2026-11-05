@@ -93,6 +93,7 @@ let blobUrl = null;
 /** URL sumber: stream dari server (Google Drive) atau blob dari file lokal. */
 async function sourceUrl(t) {
   if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null; }
+  if (t.url && String(t.id).startsWith('quran-')) return t.url; // murottal dari CDN equran.id
   if (!t.local) return apiUrl(`/api/library/stream/${encodeURIComponent(t.id)}`);
   blobUrl = URL.createObjectURL(await getLocalFile(t.id));
   return blobUrl;

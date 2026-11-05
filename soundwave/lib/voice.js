@@ -81,6 +81,14 @@ function parse(text) {
   if (!t) return { action: 'unknown', text: t };
 
   for (const [re, cmd] of CONTROLS) if (re.test(t)) return { action: 'control', command: cmd, text: t };
+  // Jadwal sholat: "jadwal sholat", "kapan maghrib", "jam berapa adzan isya"
+  let ms = t.match(/^(?:kapan|jam berapa|pukul berapa)\s+(?:waktu\s+|adzan\s+|azan\s+|sholat\s+|salat\s+|shalat\s+)*(subuh|dzuhur|zuhur|lohor|ashar|asar|maghrib|magrib|isya|isha|imsak)/)
+    || t.match(/^(?:jadwal|waktu)\s+(?:sholat|salat|shalat|solat)(?:\s+(subuh|dzuhur|zuhur|ashar|asar|maghrib|magrib|isya|imsak))?(?:\s+hari ini)?$/);
+  if (ms) {
+    const alias = { zuhur: 'dzuhur', lohor: 'dzuhur', asar: 'ashar', magrib: 'maghrib', isha: 'isya' };
+    return { action: 'sholat', waktu: ms[1] ? alias[ms[1]] || ms[1] : null, text: t };
+  }
+
   if (/^(?:bantuan|help|apa (?:saja )?yang bisa (?:kamu|kau|anda) lakukan|perintah apa saja)/.test(t)) return { action: 'help', text: t };
 
   let m = t.match(ADD);
@@ -97,6 +105,10 @@ function parse(text) {
     let p;
     if ((p = rest.match(/^(?:semua\s+)?(?:lagu(?:\s+lagu)?\s+)?(?:yang\s+ada\s+)?(?:dari|di|dalam)?\s*(?:playlist|daftar putar)\s+(.+)$/))) {
       return { action: 'play', target: 'playlist', query: p[1].trim(), shuffle, text: t };
+    }
+    if ((p = rest.match(/^(?:(?:al\s*)?qur\s*an\s+)?(?:surat|surah|qs)\s+(.+)$/))) return { action: 'play', target: 'surat', query: p[1].trim(), text: t };
+    if (/\b(?:hapalan|hafalan|murottal|murotal|mengaji|ngaji)\b/.test(rest) || /^(?:al\s*)?qur\s*an$/.test(rest.replace(SONG_PREFIX, '').trim())) {
+      return { action: 'play', target: 'quran', shuffle, text: t };
     }
     if (/\b(?:favorit|favorite|kesukaan(?:ku)?|yang (?:aku |saya )?sukai?)\b/.test(rest)) return { action: 'play', target: 'favorites', shuffle, text: t };
     if (/\b(?:terakhir|baru saja|barusan) (?:diputar|didengar)\b/.test(rest)) return { action: 'play', target: 'recent', shuffle, text: t };

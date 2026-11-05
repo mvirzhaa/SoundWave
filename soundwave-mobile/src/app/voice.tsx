@@ -19,7 +19,7 @@ import type { VoiceResult } from '../lib/types';
 
 const EXAMPLES = [
   'putarkan lagu The Corrs', 'putarkan lagu rock', 'putarkan lagu dari playlist nostalgia',
-  'buatkan playlist kenangan', 'masukkan lagu Dewa ke playlist kenangan', 'masukkan lagu fly me to the moon ke playlist kenangan',
+  'buatkan playlist kenangan', 'masukkan lagu Dewa ke playlist kenangan', 'masukkan lagu fly me to the moon ke playlist kenangan', 'putar surat Al-Mulk', 'putarkan hapalan quran', 'kapan maghrib',
 ];
 
 export default function VoiceScreen() {

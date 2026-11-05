@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from '../lib/auth';
 import { LibraryProvider } from '../lib/library';
 import { PlayerProvider } from '../lib/player';
 import { UiProvider } from '../lib/ui';
+import { SholatProvider } from '../lib/sholat';
 import { C } from '../lib/theme';
 
 function RootStack() {
@@ -29,6 +30,7 @@ function RootStack() {
         <Stack.Screen name="player" options={{ presentation: 'modal', headerShown: false, animation: 'slide_from_bottom' }} />
         <Stack.Screen name="voice" options={{ presentation: 'transparentModal', headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="drive" options={{ headerShown: false }} />
+        <Stack.Screen name="quran" options={{ title: 'Hapalan Quran' }} />
       </Stack.Protected>
     </Stack>
   );
@@ -42,7 +44,9 @@ export default function RootLayout() {
         <LibraryProvider>
           <PlayerProvider>
             <UiProvider>
-              <RootStack />
+              <SholatProvider>
+                <RootStack />
+              </SholatProvider>
             </UiProvider>
           </PlayerProvider>
         </LibraryProvider>

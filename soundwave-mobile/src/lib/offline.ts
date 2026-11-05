@@ -60,7 +60,7 @@ export async function downloadOffline(t: Track) {
   try {
     ensureDir();
     const dest = new File(dir, `${t.id}.${extOf(t)}`);
-    const file = await File.downloadFileAsync(await streamUrl(t.id), dest, { idempotent: true });
+    const file = await File.downloadFileAsync(t.url && t.id.startsWith('quran-') ? t.url : await streamUrl(t.id), dest, { idempotent: true });
     const { available, itemId, ...meta } = t;
     index[t.id] = { uri: file.uri, track: meta, savedAt: Date.now() };
   } finally {

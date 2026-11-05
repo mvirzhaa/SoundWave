@@ -52,7 +52,7 @@ export function openVoice() {
   const status = h('p.voice-status', { text: voiceSupported ? 'Mendengarkan… silakan bicara' : 'Browser ini tidak mendukung pengenal suara. Ketik perintah di bawah.' });
   const orb = h('button.voice-orb', { type: 'button', 'aria-label': 'Mulai/berhenti mendengarkan' }, icon('M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3'));
   const text = h('input', { placeholder: 'atau ketik: putarkan lagu the corrs', 'aria-label': 'Perintah' });
-  const examples = h('div.voice-ex', {}, ['putarkan lagu The Corrs', 'putarkan lagu rock', 'putarkan playlist nostalgia', 'buatkan playlist kenangan', 'masukkan lagu Dewa ke playlist kenangan']
+  const examples = h('div.voice-ex', {}, ['putarkan lagu The Corrs', 'putarkan lagu rock', 'putarkan playlist nostalgia', 'buatkan playlist kenangan', 'masukkan lagu Dewa ke playlist kenangan', 'putar surat Al-Mulk', 'kapan maghrib']
     .map((x) => h('button.chip', { type: 'button', text: `“${x}”`, onclick: () => submit(x) })));
   let rec = null;
   let submitted = false; // perintah sudah dikirim → abaikan error/akhir dari pengenal suara

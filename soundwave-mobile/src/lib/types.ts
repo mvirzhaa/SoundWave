@@ -33,9 +33,12 @@ export type Track = {
   tagGenre?: string | null;
   coverUri?: string | null; // sampul dari tag ID3
   added?: number;
+  // --- murottal (playlist Hapalan Quran) ---
+  url?: string; // audio langsung (CDN equran.id)
+  quran?: { surat: number; nama: string; arti: string; jumlahAyat: number; tempatTurun: string; ayat?: number };
 };
 
-export type PlaylistSummary = { id: number | string; name: string; count: number; covers: string[]; special?: boolean };
+export type PlaylistSummary = { id: number | string; name: string; count: number; covers: string[]; special?: boolean; quran?: boolean };
 export type PlaylistDetail = { id: number | string; name: string; special: boolean; items: Track[] };
 
 export type SearchResult = {

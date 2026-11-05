@@ -73,6 +73,18 @@ CREATE TABLE IF NOT EXISTS lyrics (
   updated_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS kv_cache (
+  key TEXT PRIMARY KEY,            -- cache data eksternal (jadwal sholat, daftar kota, surat Al-Qur'an)
+  data TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_prefs (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  data TEXT NOT NULL,              -- JSON pengaturan (wilayah sholat, adzan, qari)
+  updated_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS recent_plays (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   file_id TEXT NOT NULL,
@@ -88,4 +100,25 @@ function tx(fn) {
   try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; }
 }
 
-module.exports = { db, tx };
+const getKv = db.prepare('SELECT data, updated_at FROM kv_cache WHERE key = ?');
+const putKv = db.prepare(`INSERT INTO kv_cache (key, data, updated_at) VALUES (?, ?, ?)
+  ON CONFLICT(key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`);
+
+/**
+ * Ambil dari cache atau jalankan loader. Bila loader gagal, data lama (kedaluwarsa) tetap dipakai.
+ * @param {string} key @param {number} ttlMs @param {() => Promise<any>} loader
+ */
+async function cached(key, ttlMs, loader) {
+  const row = getKv.get(key);
+  if (row && Date.now() - row.updated_at < ttlMs) return JSON.parse(row.data);
+  try {
+    const data = await loader();
+    putKv.run(key, JSON.stringify(data), Date.now());
+    return data;
+  } catch (e) {
+    if (row) return JSON.parse(row.data);
+    throw e;
+  }
+}
+
+module.exports = { db, tx, cached };

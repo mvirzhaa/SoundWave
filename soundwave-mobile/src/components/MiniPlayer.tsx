@@ -16,7 +16,7 @@ export function MiniPlayer() {
     <View style={s.wrap}>
       <View style={s.progress}><View style={[s.fill, { width: `${ratio * 100}%` }]} /></View>
       <Pressable style={s.info} onPress={() => router.push('/player')}>
-        <Cover ytId={t.ytId} uri={t.coverUri} seed={t.artist + t.title} size={44} radius={8} />
+        <Cover ytId={t.ytId} uri={t.coverUri} quran={t.quran?.surat} seed={t.artist + t.title} size={44} radius={8} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={s.title} numberOfLines={1}>{t.title}</Text>
           <Text style={s.artist} numberOfLines={1}>{t.artist}</Text>

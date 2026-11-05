@@ -58,6 +58,7 @@ async function load(t, refresh = false) {
   state.data = null; state.lines = []; state.active = -1;
   const el = box();
   el.textContent = '';
+  if (t.quran) return loadQuran(t, seq);
   el.append(h('p.lyrics-msg', { text: 'Mencari lirik…' }));
   // Tunggu durasi asli file (lebih akurat untuk pencocokan versi lagu di LRCLIB)
   if (!(media.duration > 0)) {
@@ -147,5 +148,32 @@ function sync() {
   if (Date.now() - state.userScrollAt > 3500) {
     const el = box();
     el.scrollTo({ top: p.offsetTop - el.clientHeight / 2 + p.clientHeight / 2, behavior: 'smooth' });
+  }
+}
+
+/* ---------- Teks Al-Qur'an untuk murottal ---------- */
+const suratCache = new Map();
+async function loadQuran(t, seq) {
+  const el = box();
+  el.append(h('p.lyrics-msg', { text: 'Memuat teks surat…' }));
+  try {
+    const n = t.quran.surat;
+    if (!suratCache.has(n)) suratCache.set(n, await get(`/api/quran/surat/${n}`));
+    if (seq !== state.seq) return;
+    const s = suratCache.get(n);
+    el.textContent = '';
+    el.append(h('div.lyrics-head', {}, h('small', { text: `${s.namaLatin} · ${s.arti} · ${s.jumlahAyat} ayat — teks & terjemahan Kemenag RI` })));
+    const list = h('div.ayat-list');
+    s.ayat.forEach((a) => list.append(h(`div.ayat${t.quran.ayat === a.nomorAyat ? '.active' : ''}`, { dataset: { ayat: a.nomorAyat } },
+      h('p.ar', { lang: 'ar', dir: 'rtl' }, a.teksArab, h('span.no', { text: ` ﴿${a.nomorAyat.toLocaleString('ar-EG')}﴾` })),
+      h('p.lat', { text: a.teksLatin }),
+      h('p.id', {}, h('b', { text: `${a.nomorAyat}. ` }), a.teksIndonesia))));
+    el.append(list);
+    const act = list.querySelector('.ayat.active');
+    if (act) el.scrollTo({ top: act.offsetTop - 40 });
+  } catch (e) {
+    if (seq !== state.seq) return;
+    el.textContent = '';
+    el.append(h('p.lyrics-msg', { text: e.message }));
   }
 }

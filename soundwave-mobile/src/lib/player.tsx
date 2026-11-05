@@ -69,10 +69,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (t.local && t.uri) return { uri: t.uri }; // file di penyimpanan HP
     const local = offlineUri(t.id);
     if (local) return { uri: local };
+    if (t.url && t.id.startsWith('quran-')) return { uri: t.url }; // murottal langsung dari CDN
     return { uri: `${getServer()}/api/library/stream/${encodeURIComponent(t.id)}?t=${encodeURIComponent(tokenRef.current)}` };
   }, []);
 
-  const meta = (t: Track) => ({ title: t.title, artist: t.artist, albumTitle: t.album || 'SoundWave', artworkUrl: ytThumb(t.ytId, true) || t.coverUri || undefined });
+  const meta = (t: Track) => ({ title: t.title, artist: t.artist, albumTitle: t.album || 'SoundWave', artworkUrl: ytThumb(t.ytId, true) || t.coverUri || undefined, ...(t.quran ? { albumTitle: 'Hapalan Quran' } : {}) });
 
   const onTrack = useCallback((i: number) => {
     indexRef.current = i;

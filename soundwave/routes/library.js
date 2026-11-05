@@ -16,6 +16,8 @@ const RECENT_MAX = 50;
 const P = require('../lib/playlists');
 const G = require('../lib/genre');
 const { snapshot } = P;
+const Q = require('../lib/quran');
+const Prefs = require('../lib/prefs');
 
 async function trackMap(user) {
   try { return new Map(G.attach(await D.listTracks(user)).map((t) => [t.id, t])); } catch { return new Map(); }
@@ -25,6 +27,7 @@ async function trackMap(user) {
 function hydrate(fileId, metaJson, map) {
   // Lagu lokal: hanya perangkat pemiliknya yang tahu apakah file masih ada
   if (P.isLocalId(fileId)) return { id: fileId, ...JSON.parse(metaJson), local: true, cover: null, available: true };
+  if (Q.isQuranId(fileId)) { const m = JSON.parse(metaJson); return { id: fileId, ...m, cover: null, available: Boolean(m.url) }; }
   const live = map.get(fileId);
   if (live) return { ...live, available: true };
   const m = JSON.parse(metaJson);
@@ -122,6 +125,7 @@ r.get('/playlists', auth, (req, res) => {
     special: [
       { id: 'recent', name: 'Terakhir Diputar', count: recRows.length, covers: coversOf(recRows), special: true },
       { id: 'favorites', name: 'Favorit', count: favRows.length, covers: coversOf(favRows), special: true },
+      { id: 'quran', name: 'Hapalan Quran', count: Q.JUZ30.length, covers: [], special: true, quran: true },
     ],
     playlists: lists.map((p) => ({ id: p.id, name: p.name, count: p.count, updatedAt: p.updated_at, covers: coversOf(coverStmt.all(p.id)) })),
   });
@@ -135,6 +139,15 @@ r.post('/playlists', auth, (req, res) => {
 });
 
 r.get('/playlists/:id', auth, wrap(async (req, res) => {
+  if (req.params.id === 'quran') {
+    // Playlist bawaan: murottal Juz 30 (+ Al-Fatihah) atau seluruh 114 surat
+    const pref = Prefs.get(req.user.id).quran;
+    const qari = /^\d{2}$/.test(String(req.query.qari || '')) ? String(req.query.qari) : pref.qari;
+    const semua = req.query.semua != null ? req.query.semua === '1' : pref.semua;
+    const pl = await Q.playlist({ qari, semua });
+    return res.json({ id: 'quran', name: 'Hapalan Quran', special: true, quran: true, semua, ...pl,
+      items: pl.items.map((t) => ({ ...t, itemId: t.id })) });
+  }
   const map = await trackMap(req.user);
   const uid = req.user.id;
   if (req.params.id === 'favorites' || req.params.id === 'recent') {

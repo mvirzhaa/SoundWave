@@ -69,6 +69,12 @@ export function fillCover(el, track, { hq = false } = {}) {
   el.textContent = '';
   el.style.removeProperty('--h');
   const yt = track?.ytId;
+  if (track?.quran) {
+    // Sampul murottal: nomor surat di atas gradasi hijau
+    el.classList.add('gen', 'quran-cover');
+    el.append(h('span.qnum', { text: String(track.quran.surat || '') }));
+    return el;
+  }
   if (yt) {
     const img = h('img', { alt: '', loading: 'lazy', src: `https://i.ytimg.com/vi/${yt}/${hq ? 'hqdefault' : 'mqdefault'}.jpg` });
     img.onerror = () => { img.remove(); el.classList.add('gen'); el.append(icon(I.note)); };

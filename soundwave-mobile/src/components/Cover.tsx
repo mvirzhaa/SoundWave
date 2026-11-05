@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ytThumb } from '../lib/api';
@@ -13,11 +13,22 @@ type Props = {
   radius?: number;
   hq?: boolean;
   icon?: keyof typeof Ionicons.glyphMap;
+  quran?: number | string; // nomor surat → sampul hijau bernomor
 };
 
+export const QURAN_GREEN = '#0f8a64';
+
 /** Sampul lagu: thumbnail YouTube (dipotong persegi) atau warna dari judul + ikon. */
-export function Cover({ ytId, uri: localUri, seed = '', size, radius = 10, hq, icon = 'musical-notes' }: Props) {
+export function Cover({ ytId, uri: localUri, seed = '', size, radius = 10, hq, icon = 'musical-notes', quran }: Props) {
   const [failed, setFailed] = useState(false);
+  if (quran != null) {
+    const label = String(quran);
+    return (
+      <View style={[st.box, { width: size, height: size, borderRadius: radius, backgroundColor: QURAN_GREEN }]}>
+        <Text style={{ color: '#fff', fontWeight: '800', fontSize: label.length > 3 ? size * 0.26 : size * (label.length > 2 ? 0.3 : 0.36) }}>{label}</Text>
+      </View>
+    );
+  }
   const uri = !failed ? ytThumb(ytId, hq) || localUri || null : null;
   const zoom = ytId ? 1.35 : 1; // thumbnail YouTube punya letterbox; sampul album sudah persegi
   return (

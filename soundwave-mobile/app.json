@@ -17,7 +17,8 @@
         ],
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
-        }
+        },
+        "NSLocationWhenInUseUsageDescription": "SoundWave memakai lokasi Anda untuk menentukan wilayah jadwal sholat dan waktu adzan."
       }
     },
     "android": {
@@ -28,7 +29,12 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.SCHEDULE_EXACT_ALARM"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -66,6 +72,22 @@
           "photosPermission": false,
           "savePhotosPermission": false,
           "isAccessMediaLocationEnabled": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SoundWave memakai lokasi Anda untuk menentukan wilayah jadwal sholat dan waktu adzan.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#8b6dff",
+          "defaultChannel": "adzan",
+          "sounds": []
         }
       ]
     ],

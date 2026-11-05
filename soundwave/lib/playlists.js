@@ -20,6 +20,10 @@ function snapshot(t) {
     duration: Number.isFinite(Number(t.duration)) && t.duration ? Math.round(Number(t.duration)) : null,
     album: str(t.album, 200) || null,
     genre: str(t.genre, 60) || null,
+    // Murottal: simpan URL audio & info surat agar bisa diputar ulang dari playlist
+    ...(String(t.id || '').startsWith('quran-') && /^https:\/\/[^\s]{5,500}$/.test(t.url || '')
+      ? { url: t.url, quran: { surat: Number(t.quran?.surat) || null, ayat: Number(t.quran?.ayat) || null, nama: str(t.quran?.nama, 60) } }
+      : {}),
   };
 }
 

@@ -73,7 +73,7 @@ export default function PlayerScreen() {
         />
       ) : (
         <View style={s.artWrap}>
-          <Cover ytId={t.ytId} uri={t.coverUri} seed={t.artist + t.title} size={art} radius={22} hq />
+          <Cover ytId={t.ytId} uri={t.coverUri} quran={t.quran?.surat} seed={t.artist + t.title} size={art} radius={22} hq />
         </View>
       )}
 
@@ -114,7 +114,7 @@ export default function PlayerScreen() {
       <View style={s.bottom}>
         <Pressable style={[s.pill, view === 'lyrics' && { borderColor: C.accent }]} onPress={() => toggleView('lyrics')}>
           <Ionicons name="document-text-outline" size={18} color={view === 'lyrics' ? C.accent : C.text} />
-          <Text style={[s.pillText, view === 'lyrics' && { color: C.accent }]}>Lirik</Text>
+          <Text style={[s.pillText, view === 'lyrics' && { color: C.accent }]}>{t.quran ? 'Ayat' : 'Lirik'}</Text>
         </Pressable>
         <Pressable style={[s.pill, showQueue && { borderColor: C.accent }]} onPress={() => toggleView('queue')}>
           <Ionicons name="list" size={18} color={showQueue ? C.accent : C.text} />

@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       arch:
-        description: 'Target ARM Architecture (default: arm64-v8a,armeabi-v7a)'
+        description: 'Target ARM Architecture'
         required: false
         default: 'arm64-v8a,armeabi-v7a'
         type: choice
@@ -53,18 +53,15 @@ jobs:
           cache: 'npm'
           cache-dependency-path: soundwave-mobile/package-lock.json
 
-      - name: 📱 Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: 📦 Install Node Dependencies
         run: npm ci
 
       - name: ⚙️ Generate Native Android Project (Expo Prebuild)
-        run: npx expo prebuild --platform android --clean
+        run: npx expo prebuild --platform android --clean --no-install
         env:
           EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://vr.ti.fts.uika-bogor.ac.id/soundwave' }}
 
-      - name: 🔑 Configure Release Keystore & ARM Architecture
+      - name: 🛠️ Configure Gradle & ARM Architecture
         run: |
           TARGET_ARCH="${{ inputs.arch || 'arm64-v8a,armeabi-v7a' }}"
           echo "Target Architectures: $TARGET_ARCH"
@@ -72,54 +69,8 @@ jobs:
           # Batasi arsitektur native hanya untuk ARM (tanpa x86/x86_64 emulator)
           echo "reactNativeArchitectures=$TARGET_ARCH" >> android/gradle.properties
           
-          # Siapkan keystore release
-          KEYSTORE_FILE="android/app/release.keystore"
-          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
-            echo "Menggunakan release keystore dari GitHub Secrets..."
-            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > "$KEYSTORE_FILE"
-          else
-            echo "Membuat release keystore otomatis..."
-            keytool -genkeypair -v -keystore "$KEYSTORE_FILE" -alias soundwave \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass soundwave123 -keypass soundwave123 \
-              -dname "CN=SoundWave, OU=TI FTS UIKA, O=UIKA Bogor, L=Bogor, ST=Jawa Barat, C=ID"
-          fi
-
-          # Konfigurasi signingConfigs.release di android/app/build.gradle
-          python3 - << 'EOF'
-          import re
-          path = "android/app/build.gradle"
-          with open(path, "r", encoding="utf-8") as f:
-              content = f.read()
-
-          signing_block = """
-                  release {
-                      storeFile file('release.keystore')
-                      storePassword 'soundwave123'
-                      keyAlias 'soundwave'
-                      keyPassword 'soundwave123'
-                  }
-          """
-          if "signingConfigs {" in content and "release {" not in content:
-              content = content.replace("signingConfigs {", "signingConfigs {" + signing_block)
-
-          # Arahkan buildTypes.release untuk memakai signingConfigs.release
-          content = re.sub(
-              r'(buildTypes\s*\{\s*release\s*\{[^}]*?)signingConfig\s+signingConfigs\.debug',
-              r'\1signingConfig signingConfigs.release',
-              content,
-              flags=re.DOTALL
-          )
-          if "signingConfig signingConfigs.release" not in content:
-              content = re.sub(
-                  r'(buildTypes\s*\{\s*release\s*\{)',
-                  r'\1\n            signingConfig signingConfigs.release',
-                  content
-              )
-
-          with open(path, "w", encoding="utf-8") as f:
-              f.write(content)
-          EOF
+          # Alokasikan RAM yang cukup untuk kompilasi C++ React Native
+          echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m" >> android/gradle.properties
 
       - name: 🔨 Build Release APK (Gradle)
         run: |
@@ -127,11 +78,50 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures="${{ inputs.arch || 'arm64-v8a,armeabi-v7a' }}"
 
-      - name: 📦 Collect APK Artifacts
+      - name: 🔑 Sign Release APK
         run: |
           mkdir -p ../dist-apk
-          find android/app/build/outputs/apk/release -name "*.apk" -exec cp {} ../dist-apk/ \;
-          echo "Hasil build APK:"
+          KEYSTORE_FILE="release.keystore"
+          
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "Menggunakan release keystore dari GitHub Secrets..."
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > "$KEYSTORE_FILE"
+            KS_PASS="${{ secrets.KEYSTORE_PASSWORD || 'soundwave123' }}"
+            KEY_ALIAS="${{ secrets.KEY_ALIAS || 'soundwave' }}"
+            KEY_PASS="${{ secrets.KEY_PASSWORD || 'soundwave123' }}"
+          else
+            echo "Membuat release keystore otomatis..."
+            keytool -genkeypair -v -keystore "$KEYSTORE_FILE" -alias soundwave \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass soundwave123 -keypass soundwave123 \
+              -dname "CN=SoundWave, OU=TI FTS UIKA, O=UIKA Bogor, L=Bogor, ST=Jawa Barat, C=ID"
+            KS_PASS="soundwave123"
+            KEY_ALIAS="soundwave"
+            KEY_PASS="soundwave123"
+          fi
+
+          BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n 1)
+          echo "Menggunakan build-tools: $BUILD_TOOLS_DIR"
+
+          for apk in $(find android/app/build/outputs/apk/release -name "*.apk"); do
+            echo "Memeriksa APK: $apk"
+            APK_NAME=$(basename "$apk")
+            SIGNED_APK="../dist-apk/${APK_NAME/-unsigned/}"
+            
+            # Sign APK dengan apksigner
+            "$BUILD_TOOLS_DIR/apksigner" sign \
+              --ks "$KEYSTORE_FILE" \
+              --ks-pass "pass:$KS_PASS" \
+              --ks-key-alias "$KEY_ALIAS" \
+              --key-pass "pass:$KEY_PASS" \
+              --out "$SIGNED_APK" \
+              "$apk"
+              
+            echo "Verifikasi signature: $SIGNED_APK"
+            "$BUILD_TOOLS_DIR/apksigner" verify "$SIGNED_APK"
+          done
+
+          echo "APK yang siap diunduh:"
           ls -la ../dist-apk/
 
       - name: 🚀 Upload Release APK Artifact
@@ -140,4 +130,3 @@ jobs:
           name: soundwave-mobile-arm-release
           path: dist-apk/*.apk
           retention-days: 30
-

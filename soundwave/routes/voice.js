@@ -11,6 +11,9 @@ const D = require('../lib/drive');
 const G = require('../lib/genre');
 const P = require('../lib/playlists');
 const V = require('../lib/voice');
+const Q = require('../lib/quran');
+const S = require('../lib/sholat');
+const Prefs = require('../lib/prefs');
 
 const r = express.Router();
 // Daftar lagu lokal bisa ribuan judul — perbesar batas body khusus endpoint ini
@@ -19,7 +22,8 @@ const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).cat
 
 const HELP = 'Contoh perintah: "putarkan lagu The Corrs", "putarkan lagu rock", '
   + '"putarkan playlist nostalgia", "buatkan playlist kenangan", '
-  + '"masukkan lagu Dewa ke playlist kenangan", "lagu berikutnya", atau "jeda".';
+  + '"masukkan lagu Dewa ke playlist kenangan", "putar surat Al-Mulk", "putar hapalan Quran", '
+  + '"kapan maghrib", "lagu berikutnya", atau "jeda".';
 
 const titleCase = (s) => s.replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 const shuffled = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -66,6 +70,7 @@ async function execute(user, intent, local = []) {
   switch (intent.action) {
     case 'help': return { action: 'none', message: HELP };
     case 'control': return { action: 'control', command: intent.command, message: '' };
+    case 'sholat': return jadwalSholat(user, intent.waktu);
     case 'unknown': return { action: 'none', message: `Maaf, saya belum mengerti "${intent.text}". ${HELP}` };
     default: break;
   }
@@ -78,6 +83,17 @@ async function execute(user, intent, local = []) {
     const pl = P.create(user.id, name);
     return { action: 'playlist_created', playlist: pl, message: `Playlist ${pl.name} sudah dibuat.` };
   }
+
+  // Al-Qur'an tidak butuh pustaka Drive
+  if (intent.action === 'play' && intent.target === 'quran') return playQuran(user, intent.shuffle);
+  if (intent.action === 'play' && intent.target === 'surat') {
+    const s = await Q.cariSurat(intent.query);
+    if (!s) return { action: 'none', message: `Surat "${intent.query}" tidak ditemukan.` };
+    const pl = await Q.playlist({ qari: Prefs.get(user.id).quran.qari, semua: true });
+    const t = pl.items.find((x) => x.quran.surat === s.nomor);
+    return play('quran', 'Hapalan Quran', [t], false, `Memutar surat ${s.namaLatin}, dibacakan ${t.artist}.`);
+  }
+  if (intent.action === 'play' && intent.target === 'playlist' && /hapalan|hafalan|qur\s*an|murottal/.test(intent.query)) return playQuran(user, intent.shuffle);
 
   // Perintah berikut butuh daftar lagu dari Drive
   const tracks = await libraryFor(user, local);
@@ -161,6 +177,34 @@ async function execute(user, intent, local = []) {
       : `Memutar ${plural(list.length)} yang cocok dengan "${query}".`);
   }
   return { action: 'none', message: `Maaf, saya tidak menemukan artis, genre, playlist, atau lagu "${query}" di pustaka Anda.` };
+}
+
+async function playQuran(user, shuffle) {
+  const pref = Prefs.get(user.id).quran;
+  const pl = await Q.playlist(pref);
+  return { ...play('quran', 'Hapalan Quran', pl.items, Boolean(shuffle), `Memutar playlist Hapalan Quran (${pl.items.length} surat), dibacakan ${pl.items[0]?.artist}.`),
+    playlist: { id: 'quran', name: 'Hapalan Quran' } };
+}
+
+const NAMA_WAKTU = { imsak: 'Imsak', subuh: 'Subuh', dzuhur: 'Dzuhur', ashar: 'Ashar', maghrib: 'Maghrib', isya: 'Isya' };
+async function jadwalSholat(user, waktu) {
+  const p = Prefs.get(user.id).sholat;
+  const now = new Date();
+  let j;
+  try {
+    if (p.mode === 'auto' && p.koordinat && !p.kota) j = { ...S.jadwalKoordinat(p.koordinat.lat, p.koordinat.lon, now.getFullYear(), now.getMonth() + 1, p.koordinat.tz), lokasi: p.koordinat.nama };
+    else if (p.kota) j = await S.jadwalKota(p.kota.id, now.getFullYear(), now.getMonth() + 1);
+  } catch (e) { return { action: 'none', message: e.message }; }
+  if (!j) return { action: 'none', message: 'Wilayah jadwal sholat belum diatur. Atur di menu Sholat.' };
+  // Tanggal hari ini menurut zona waktu wilayah
+  const local = new Date(now.getTime() + j.tz * 60000);
+  const today = local.toISOString().slice(0, 10);
+  const d = j.jadwal.find((x) => x.date === today) || j.jadwal[local.getUTCDate() - 1];
+  if (!d) return { action: 'none', message: 'Jadwal hari ini tidak tersedia.' };
+  const where = j.lokasi ? ` untuk ${j.lokasi}` : '';
+  if (waktu) return { action: 'none', message: `Waktu ${NAMA_WAKTU[waktu]}${where} hari ini pukul ${d[waktu].replace(':', '.')} ${j.zona}.` };
+  const list = ['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya'].map((k) => `${NAMA_WAKTU[k]} ${d[k].replace(':', '.')}`).join(', ');
+  return { action: 'none', message: `Jadwal sholat${where} hari ini: ${list} ${j.zona}.` };
 }
 
 function playGenre(tracks, query, shuffle) {

@@ -7,6 +7,9 @@ import { initPlayer, restore as restorePlayer, reset as resetPlayer, closeFull }
 import { renderSearch } from './views/search.js';
 import { renderLibrary, renderPlaylist, renderGroup, trackMenu } from './views/library.js';
 import { renderAccount } from './views/account.js';
+import { renderSholat } from './views/sholat.js';
+import { loadSholat, nextChipText } from './sholat.js';
+import { on as onEvent } from './store.js';
 import { openVoice } from './voice.js';
 
 const $ = (id) => document.getElementById(id);
@@ -82,6 +85,7 @@ function enterApp(user) {
   if (!playerReady) { initPlayer({ trackMenu }); playerReady = true; }
   restorePlayer();
   initLocal().catch(() => {});
+  loadSholat();
   loadLocalFavorites();
   route();
 }
@@ -121,6 +125,7 @@ function route() {
     case 'playlist': r = renderPlaylist(view, parts[1]); break;
     case 'artis': case 'genre': r = renderGroup(view, section, parts[1] || ''); break;
     case 'akun': renderAccount(view, params, { logout }); break;
+    case 'sholat': r = renderSholat(view); break;
     default: renderSearch(view, params);
   }
   Promise.resolve(r).then((fn) => { if (typeof fn === 'function') cleanup = fn; });
@@ -132,3 +137,9 @@ window.addEventListener('hashchange', route);
 
 /* ---------- Mulai ---------- */
 get('/api/auth/me').then((r) => enterApp(r.user)).catch(() => showAuth());
+
+/* ---------- Chip waktu sholat berikutnya ---------- */
+const chip = document.getElementById('nextChip');
+const updateChip = () => { const t = nextChipText(); chip.hidden = !t; chip.textContent = t; };
+onEvent('sholat:tick', updateChip);
+onEvent('sholat', updateChip);
