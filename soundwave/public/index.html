@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#070b1d">
+  <title>SoundWave</title>
+  <meta name="description" content="Cari dan putar video YouTube, unduh MP3/MP4 ke perangkat atau Google Drive, dan dengarkan pustaka musik Drive Anda dengan playlist.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- ========== Masuk / Daftar ========== -->
+  <section id="authView" class="auth" hidden>
+    <div class="auth-card">
+      <div class="auth-logo"><div class="bars" data-bars="14"></div></div>
+      <h1>Sound<span>Wave</span></h1>
+      <p class="auth-sub" id="authSub">Masuk untuk mencari, mengunduh, dan memutar musik dari Google Drive Anda.</p>
+      <div class="seg auth-tabs" role="tablist">
+        <button type="button" role="tab" data-mode="login" aria-selected="true">Masuk</button>
+        <button type="button" role="tab" data-mode="register" aria-selected="false">Daftar</button>
+      </div>
+      <form id="authForm" novalidate>
+        <label class="field" data-only="register"><span>Nama</span>
+          <input name="name" autocomplete="name" maxlength="80"></label>
+        <label class="field"><span>Email</span>
+          <input name="email" type="email" autocomplete="email" required maxlength="160"></label>
+        <label class="field"><span>Kata sandi</span>
+          <input name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="200"></label>
+        <p class="err" id="authErr" hidden></p>
+        <button class="btn-primary wide" type="submit" id="authSubmit">Masuk</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ========== Aplikasi ========== -->
+  <div id="appView" class="app" hidden>
+    <header class="topbar">
+      <a class="brand" href="#/cari" aria-label="SoundWave">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#wave"/></svg>
+        <span>SoundWave</span>
+      </a>
+      <nav class="mainnav" aria-label="Menu utama">
+        <a href="#/cari" data-nav="cari"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Cari</span></a>
+        <a href="#/pustaka" data-nav="pustaka"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg><span>Pustaka</span></a>
+        <a href="#/akun" data-nav="akun"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span>Akun</span></a>
+      </nav>
+      <button class="icon-btn theme-toggle" id="themeToggle" type="button" aria-label="Ganti tema">
+        <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+      </button>
+    </header>
+
+    <main id="view" class="view" tabindex="-1"></main>
+
+    <!-- Mini player -->
+    <div class="mini" id="mini" hidden>
+      <div class="mini-progress"><i id="miniProg"></i></div>
+      <button class="mini-info" id="miniOpen" type="button" aria-label="Buka pemutar">
+        <span class="cover sm" id="miniCover"></span>
+        <span class="mini-text"><b id="miniTitle"></b><small id="miniArtist"></small></span>
+      </button>
+      <div class="mini-ctl">
+        <button class="icon-btn" data-act="prev" aria-label="Sebelumnya"><svg viewBox="0 0 24 24"><path class="f" d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+        <button class="icon-btn play" data-act="toggle" aria-label="Putar/Jeda"><svg viewBox="0 0 24 24"><path class="f ic-play" d="M8 5v14l11-7z"/><path class="f ic-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg></button>
+        <button class="icon-btn" data-act="next" aria-label="Berikutnya"><svg viewBox="0 0 24 24"><path class="f" d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+      </div>
+    </div>
+
+    <!-- Pemutar penuh -->
+    <section class="full" id="full" hidden aria-label="Pemutar">
+      <header class="full-top">
+        <button class="icon-btn" id="fullClose" aria-label="Tutup pemutar"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="full-src"><small>Memutar dari</small><b id="fullSource">Pustaka</b></div>
+        <button class="icon-btn" id="fullMenu" aria-label="Menu lagu"><svg viewBox="0 0 24 24"><circle class="f" cx="12" cy="5" r="1.6"/><circle class="f" cx="12" cy="12" r="1.6"/><circle class="f" cx="12" cy="19" r="1.6"/></svg></button>
+      </header>
+      <div class="full-body">
+        <div class="stage" id="stage">
+          <span class="cover xl" id="fullCover"></span>
+          <video id="media" playsinline preload="metadata"></video>
+        </div>
+        <div class="full-side">
+          <div class="full-meta">
+            <div class="full-text"><h2 id="fullTitle"></h2><p id="fullArtist"></p></div>
+            <button class="icon-btn heart" id="favBtn" aria-label="Favorit" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></button>
+          </div>
+          <div class="seek">
+            <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Posisi">
+            <div class="times"><span id="tCur">0:00</span><span id="tDur">0:00</span></div>
+          </div>
+          <div class="full-ctl">
+            <button class="icon-btn" id="shuffleBtn" aria-label="Acak" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></button>
+            <button class="icon-btn lg" data-act="prev" aria-label="Sebelumnya"><svg viewBox="0 0 24 24"><path class="f" d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+            <button class="icon-btn xl play" data-act="toggle" aria-label="Putar/Jeda"><svg viewBox="0 0 24 24"><path class="f ic-play" d="M8 5v14l11-7z"/><path class="f ic-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg></button>
+            <button class="icon-btn lg" data-act="next" aria-label="Berikutnya"><svg viewBox="0 0 24 24"><path class="f" d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+            <button class="icon-btn" id="repeatBtn" aria-label="Ulangi: mati" data-mode="off"><svg viewBox="0 0 24 24"><path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/></svg><b class="one">1</b></button>
+          </div>
+          <div class="full-extra">
+            <label class="vol"><svg viewBox="0 0 24 24"><path class="f" d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg>
+              <input type="range" id="volume" min="0" max="1" step="0.01" value="1" aria-label="Volume"></label>
+            <button class="btn" id="queueBtn" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 6h12M4 12h12M4 18h8M18 15v6l4-3z"/></svg>Antrean</button>
+          </div>
+          <div class="queue" id="queue" hidden>
+            <div class="queue-head"><b>Antrean</b><button class="link" id="queueClear">Kosongkan berikutnya</button></div>
+            <ol id="queueList"></ol>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="overlay" class="overlay" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <svg class="sprite" width="0" height="0" aria-hidden="true">
+    <symbol id="wave" viewBox="0 0 32 32">
+      <rect x="2" y="13" width="3" height="6" rx="1.5"/><rect x="7.5" y="8" width="3" height="16" rx="1.5"/>
+      <rect x="13" y="3" width="3" height="26" rx="1.5"/><rect x="18.5" y="9" width="3" height="14" rx="1.5"/>
+      <rect x="24" y="12" width="3" height="8" rx="1.5"/>
+    </symbol>
+  </svg>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

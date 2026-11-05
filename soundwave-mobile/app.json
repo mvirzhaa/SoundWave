@@ -1,0 +1,75 @@
+{
+  "expo": {
+    "name": "SoundWave",
+    "slug": "soundwave",
+    "scheme": "soundwave",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#070b1d",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "id.ac.uika.soundwave",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
+    },
+    "android": {
+      "package": "id.ac.uika.soundwave",
+      "adaptiveIcon": {
+        "backgroundColor": "#070b1d",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true,
+          "microphonePermission": "SoundWave memakai mikrofon untuk perintah suara."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "SoundWave memakai mikrofon untuk perintah suara seperti \"putarkan lagu The Corrs\".",
+          "speechRecognitionPermission": "SoundWave mengubah ucapan Anda menjadi perintah untuk memutar lagu dan mengatur playlist."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "granularPermissions": [
+            "audio"
+          ],
+          "photosPermission": false,
+          "savePhotosPermission": false,
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
