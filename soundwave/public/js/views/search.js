@@ -1,6 +1,6 @@
 /** Halaman Cari: pencarian YouTube, pratinjau, konversi MP3/MP4, unduh / simpan ke Drive. */
 import { h, icon, I, fmtDur, fmtSize, debounce, fillBars, toast } from '../ui.js';
-import { get, post, api } from '../api.js';
+import { get, post, api, apiUrl } from '../api.js';
 import { store, emit, on, driveReady, invalidateTracks } from '../store.js';
 
 let config = { mp3: [128, 192, 256, 320], mp4: [360, 480, 720, 1080] };
@@ -229,7 +229,7 @@ function buildCard(it) {
       prog.hidden = true;
       ready.textContent = 'File siap!';
       ready.append(h('small', { text: `${job.filename} · ${fmtSize(job.size)}` }));
-      saveA.href = `/api/jobs/${job.id}/file`;
+      saveA.href = apiUrl(`/api/jobs/${job.id}/file`);
       saveA.setAttribute('download', job.filename);
       showDriveState(job);
       done.hidden = false;

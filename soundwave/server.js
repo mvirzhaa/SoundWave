@@ -37,22 +37,31 @@ app.use(helmet({
   },
 }));
 app.use(cookieParser());
+
 // /api/voice punya parser sendiri (batas lebih besar untuk daftar lagu lokal)
 const jsonBody = express.json({ limit: '1mb' });
-app.use((req, res, next) => (req.path.startsWith('/api/voice') ? next() : jsonBody(req, res, next)));
-app.use('/api', rateLimit({ windowMs: 60 * 1000, limit: 300, standardHeaders: 'draft-7', legacyHeaders: false }));
+app.use((req, res, next) => (req.path.includes('/api/voice') ? next() : jsonBody(req, res, next)));
 
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/drive', require('./routes/drive'));
-app.use('/api/library', require('./routes/library'));
-app.use('/api/voice', require('./routes/voice'));
-app.use('/api', require('./routes/media'));
+// Router API (mendukung akses langsung /api maupun dengan subpath prefix seperti /soundwave/api)
+const apiRouter = express.Router();
+apiRouter.use(rateLimit({ windowMs: 60 * 1000, limit: 300, standardHeaders: 'draft-7', legacyHeaders: false }));
+apiRouter.use('/auth', require('./routes/auth'));
+apiRouter.use('/drive', require('./routes/drive'));
+apiRouter.use('/library', require('./routes/library'));
+apiRouter.use('/voice', require('./routes/voice'));
+apiRouter.use('/', require('./routes/media'));
+apiRouter.use((req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan.' }));
+
+app.use('/api', apiRouter);
+if (cfg.BASE_PATH) {
+  app.use(`${cfg.BASE_PATH}/api`, apiRouter);
+}
 
 /**
  * Halaman pembungkus player YouTube untuk aplikasi mobile (WebView).
  * Dimuat dari domain server agar iframe YouTube menerima Referer yang valid.
  */
-app.get('/embed/:videoId', (req, res) => {
+function sendEmbed(req, res) {
   const id = String(req.params.videoId);
   if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return res.status(400).send('ID tidak valid');
   res.setHeader('Content-Security-Policy',
@@ -63,12 +72,24 @@ app.get('/embed/:videoId', (req, res) => {
 </head><body><iframe src="https://www.youtube-nocookie.com/embed/${id}?autoplay=1&playsinline=1&rel=0&modestbranding=1"
 allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen
 referrerpolicy="strict-origin-when-cross-origin"></iframe></body></html>`);
+}
+
+app.get('/embed/:videoId', sendEmbed);
+if (cfg.BASE_PATH) {
+  app.get(`${cfg.BASE_PATH}/embed/:videoId`, sendEmbed);
+}
+
+const staticMiddleware = express.static(path.join(__dirname, 'public'), { maxAge: '1h', extensions: ['html'] });
+app.use(staticMiddleware);
+if (cfg.BASE_PATH) {
+  app.use(cfg.BASE_PATH, staticMiddleware);
+}
+
+// Fallback index.html (SPA routing)
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h', extensions: ['html'] }));
-
-app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan.' }));
-app.use((req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 // Penanganan error terpusat
 // eslint-disable-next-line no-unused-vars

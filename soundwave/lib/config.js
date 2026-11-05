@@ -22,11 +22,20 @@ const derive = (label) => crypto.createHmac('sha256', SECRET).update(label).dige
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_URL = (process.env.PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/+$/, '');
+const BASE_PATH = (() => {
+  try {
+    const p = new URL(PUBLIC_URL).pathname.replace(/\/+$/, '');
+    return p === '/' ? '' : p;
+  } catch {
+    return '';
+  }
+})();
 
 module.exports = {
   DATA_DIR,
   PORT,
   PUBLIC_URL,
+  BASE_PATH,
   SECURE_COOKIE: PUBLIC_URL.startsWith('https://'),
   JWT_KEY: derive('soundwave:jwt'),
   ENC_KEY: derive('soundwave:enc'), // 32 byte untuk AES-256-GCM

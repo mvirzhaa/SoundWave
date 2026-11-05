@@ -3,6 +3,7 @@
  * Media Session (tombol media keyboard / layar kunci HP), dan simpan sesi terakhir.
  */
 import { h, icon, I, fillCover, fmtDur, toast, actionMenu } from './ui.js';
+import { apiUrl } from './api.js';
 import { store, on, emit, toggleFavorite, recordPlay } from './store.js';
 import { getLocalFile, coverUrl, localById } from './local.js';
 
@@ -91,7 +92,7 @@ let blobUrl = null;
 /** URL sumber: stream dari server (Google Drive) atau blob dari file lokal. */
 async function sourceUrl(t) {
   if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null; }
-  if (!t.local) return `/api/library/stream/${encodeURIComponent(t.id)}`;
+  if (!t.local) return apiUrl(`/api/library/stream/${encodeURIComponent(t.id)}`);
   blobUrl = URL.createObjectURL(await getLocalFile(t.id));
   return blobUrl;
 }

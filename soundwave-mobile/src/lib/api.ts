@@ -7,7 +7,7 @@ import * as SecureStore from 'expo-secure-store';
 const KEY_SERVER = 'sw_server';
 const KEY_TOKEN = 'sw_token';
 
-export const DEFAULT_SERVER = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.10:3000';
+export const DEFAULT_SERVER = process.env.EXPO_PUBLIC_API_URL || 'https://vr.ti.fts.uika-bogor.ac.id/soundwave';
 
 let server = DEFAULT_SERVER;
 let token: string | null = null;

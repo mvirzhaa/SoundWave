@@ -61,7 +61,7 @@ export default function Login() {
             <Text style={s.serverText} numberOfLines={1}>Server: {server}</Text>
             <Ionicons name={showServer ? 'chevron-up' : 'chevron-down'} size={16} color={C.muted} />
           </Pressable>
-          {showServer ? <Field label="Alamat server SoundWave" value={server} onChange={setServerInput} keyboard="url" placeholder="https://soundwave.uika-bogor.ac.id" /> : null}
+          {showServer ? <Field label="Alamat server SoundWave" value={server} onChange={setServerInput} keyboard="url" placeholder="https://vr.ti.fts.uika-bogor.ac.id/soundwave" /> : null}
 
           {err ? <Text style={s.err}>{err}</Text> : null}
           <Button label={mode === 'login' ? 'Masuk' : 'Buat akun'} onPress={submit} loading={busy} style={{ marginTop: 6 }} />

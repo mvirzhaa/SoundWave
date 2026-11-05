@@ -6,6 +6,17 @@ export class ApiError extends Error {
   constructor(message, status, code) { super(message); this.status = status; this.code = code; }
 }
 
+// Deteksi subpath secara otomatis, misal /soundwave bila di-host di https://domain.com/soundwave/
+export const BASE_PATH = (typeof window !== 'undefined' && window.location)
+  ? window.location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '')
+  : '';
+
+export const apiUrl = (p) => {
+  if (!p || /^https?:\/\//i.test(p)) return p;
+  const path = p.startsWith('/') ? p : '/' + p;
+  return `${BASE_PATH}${path}`;
+};
+
 export async function api(path, { method = 'GET', body, signal } = {}) {
   const opts = { method, credentials: 'same-origin', signal, headers: { 'X-SW-CSRF': '1' } };
   if (body !== undefined) {
@@ -13,7 +24,7 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
     opts.body = JSON.stringify(body);
   }
   let res;
-  try { res = await fetch(path, opts); } catch (e) {
+  try { res = await fetch(apiUrl(path), opts); } catch (e) {
     if (e.name === 'AbortError') throw e;
     throw new ApiError('Tidak dapat terhubung ke server.', 0);
   }

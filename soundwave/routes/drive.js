@@ -19,7 +19,7 @@ r.get('/callback', async (req, res) => {
   try { client = A.verify(String(state)).client === 'mobile' ? 'mobile' : 'web'; } catch { /* default web */ }
   const back = (status, msg) => {
     const q = new URLSearchParams({ status, ...(msg ? { message: msg } : {}) });
-    res.redirect(client === 'mobile' ? `${cfg.MOBILE_SCHEME}://drive?${q}` : `/#/akun?drive=${status}${msg ? `&message=${encodeURIComponent(msg)}` : ''}`);
+    res.redirect(client === 'mobile' ? `${cfg.MOBILE_SCHEME}://drive?${q}` : `${cfg.PUBLIC_URL}/#/akun?drive=${status}${msg ? `&message=${encodeURIComponent(msg)}` : ''}`);
   };
   if (error) return back('cancelled', 'Otorisasi dibatalkan.');
   try {
