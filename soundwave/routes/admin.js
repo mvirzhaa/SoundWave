@@ -8,6 +8,7 @@ const ADM = require('../lib/admin');
 const Adzan = require('../lib/adzan');
 const settings = require('../lib/appsettings');
 const Ann = require('../lib/announce');
+const Lyr = require('../lib/lyrics');
 
 const r = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -42,6 +43,7 @@ r.get('/stats', admin, wrap(async (req, res) => {
   res.json({
     users: { total: s.total || 0, aktif: s.aktif || 0, nonaktif: s.nonaktif || 0, aktif7: s.aktif7 || 0, drive: s.drive || 0 },
     perangkat: Ann.tokenCount(),
+    lirik: Lyr.admin.stats(),
     adzan: await Adzan.status(),
   });
 }));
@@ -108,6 +110,26 @@ r.get('/adzan/:jenis/file', admin, wrap(async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(file);
 }));
+
+/* ---------- Database lirik bersama ---------- */
+r.get('/lirik', admin, (req, res) => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const { total, items } = Lyr.admin.list(req.query.q, page, 50);
+  res.json({
+    stats: Lyr.admin.stats(), total, page, pages: Math.max(1, Math.ceil(total / 50)),
+    items: items.map((x) => ({ id: x.id, title: x.title, artist: x.artist, duration: x.duration, ytId: x.yt_id, source: x.source,
+      synced: Boolean(x.synced), instrumental: Boolean(x.instrumental), hits: x.hits, createdAt: x.created_at, lastHitAt: x.last_hit_at })),
+  });
+});
+r.get('/lirik/:id', admin, (req, res) => {
+  const x = Lyr.admin.get(Number(req.params.id));
+  if (!x) return res.status(404).json({ error: 'Lirik tidak ditemukan.' });
+  res.json({ id: x.id, title: x.title, artist: x.artist, source: x.source, synced: Boolean(x.synced), data: x.data });
+});
+r.delete('/lirik/:id', admin, (req, res) => {
+  if (!Lyr.admin.remove(Number(req.params.id))) return res.status(404).json({ error: 'Lirik tidak ditemukan.' });
+  res.json({ ok: true });
+});
 
 /* ---------- Pengumuman ---------- */
 r.get('/pengumuman', admin, (req, res) => {

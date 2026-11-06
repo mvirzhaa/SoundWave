@@ -133,6 +133,26 @@ db.exec(`
     read_at INTEGER NOT NULL,
     PRIMARY KEY (user_id, ann_id)
   );
+  -- Database lirik bersama lintas pengguna: sekali ditemukan (LRCLIB / subtitle YouTube), dipakai semua akun & HP
+  CREATE TABLE IF NOT EXISTS lyrics_db (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    artist_norm TEXT NOT NULL,
+    title_norm TEXT NOT NULL,
+    artist TEXT,
+    title TEXT,
+    duration INTEGER,               -- detik (versi lagu yang cocok dengan timing lirik)
+    yt_id TEXT,
+    source TEXT NOT NULL,           -- lrclib | youtube | youtube-auto
+    synced INTEGER NOT NULL,
+    instrumental INTEGER NOT NULL DEFAULT 0,
+    data TEXT NOT NULL,             -- JSON { source, synced, lines, plain, lang, auto, instrumental }
+    hits INTEGER NOT NULL DEFAULT 0, -- berapa kali dipakai tanpa mencari ke luar
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    last_hit_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_lyrics_db_title ON lyrics_db (title_norm);
+  CREATE INDEX IF NOT EXISTS idx_lyrics_db_yt ON lyrics_db (yt_id);
   CREATE TABLE IF NOT EXISTS push_tokens (
     token TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

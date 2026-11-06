@@ -102,6 +102,22 @@ API (gratis, tanpa key, 1 permintaan per 3 detik) berdasarkan artis + judul, lal
 Genre bisa diubah manual lewat menu ⋮ → **Ubah genre** (perubahan manual tidak ditimpa). Matikan pencarian
 otomatis dengan `GENRE_LOOKUP=false`.
 
+### Database lirik bersama
+
+Lirik dicari di **database server dulu**, baru ke sumber luar bila belum ada:
+
+1. **Database lirik SoundWave** (tabel `lyrics_db`): dipakai semua akun & semua HP. Judul dan artis dinormalisasi, jadi
+   "The Corrs - Breathless (Official Video)", "Breathless [Lirik]", dan file `Breathless.mp3` dengan artis "The Corrs - Topic"
+   dikenali sebagai lagu yang sama. Durasi ikut disimpan: lirik tersinkron hanya dipakai untuk versi lagu dengan
+   durasi hampir sama (±8 detik), sehingga versi live/remix tidak mendapat timing yang meleset.
+2. Bila belum ada → **LRCLIB**, lalu **subtitle YouTube**. Hasil yang ditemukan langsung disimpan ke database bersama.
+   Subtitle *otomatis* YouTube hanya dikaitkan ke video asalnya karena akurasinya rendah.
+3. "Tidak ditemukan" juga diingat 3 hari, supaya lagu yang sama tidak terus dicari ke luar oleh pengguna lain.
+
+Di pemutar, lirik dari database diberi label **"tersimpan di server SoundWave"**. Tombol **Cari ulang** mencari lagi ke
+sumber luar dan memperbarui database. Panel admin punya tab **Lirik** untuk melihat jumlah lagu tersimpan, berapa kali
+lirik dipakai ulang tanpa mencari ke luar, pratinjau lirik, dan **menghapus lirik yang salah**.
+
 ### Radio
 
 Menu **Radio** (web & HP) memakai direktori terbuka [Radio Browser](https://www.radio-browser.info):
@@ -251,7 +267,7 @@ POST/PUT/PATCH/DELETE) atau `Authorization: Bearer <token>` (mobile). Streaming/
 | PUT / DELETE | `/api/drive/link` `{folder}` | mode link folder (tanpa login Google, hanya baca) |
 | GET · POST | `/api/pengumuman` · `/api/pengumuman/dibaca` `{ids}` | pengumuman pengguna · tandai dibaca |
 | POST / DELETE | `/api/pengumuman/push-token` `{token, platform}` | daftarkan / lepas token push HP |
-| * | `/api/admin/...` | panel superadmin (login, stats, users, adzan, pengumuman) — cookie admin terpisah |
+| * | `/api/admin/...` | panel superadmin (login, stats, users, adzan, lirik, pengumuman) — cookie admin terpisah |
 | GET | `/api/radio?q=101.1&negara=ID` | cari stasiun (q kosong = populer; negara kosong = semua) |
 | GET · PUT · DELETE | `/api/radio/favorit` · `/favorit/:uuid` | favorit radio |
 | GET | `/api/radio/stream/:uuid` | proxy stream http (media token boleh) |

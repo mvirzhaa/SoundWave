@@ -100,7 +100,8 @@ function render(t) {
   }
   if (d.instrumental) { el.append(h('div.lyrics-empty', {}, h('p', { text: '♪ Lagu instrumental ♪' }))); return; }
 
-  const head = h('div.lyrics-head', {}, h('small', { text: SOURCE_LABEL[d.source] || d.source }));
+  const label = `${SOURCE_LABEL[d.source] || d.source}${d.server ? ' · tersimpan di server SoundWave' : ''}`;
+  const head = h('div.lyrics-head', {}, h('small', { text: label, title: d.server ? `Sudah dipakai ${d.hits || 1}× oleh pengguna SoundWave` : '' }));
   if (d.synced) {
     const offLabel = h('span.off', {});
     const showOff = () => { const o = getOffset(t.id); offLabel.textContent = o ? `${o > 0 ? '+' : ''}${o.toFixed(1)} dtk` : 'Pas'; };

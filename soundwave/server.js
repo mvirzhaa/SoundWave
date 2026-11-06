@@ -43,9 +43,25 @@ app.use(cookieParser());
 const jsonBody = express.json({ limit: '1mb' });
 app.use((req, res, next) => (req.path.includes('/api/voice') ? next() : jsonBody(req, res, next)));
 
+// Batas permintaan dihitung PER AKUN (token login), bukan per IP: pengguna di jaringan kampus/kantor sering
+// keluar lewat satu IP publik yang sama, sehingga batas per IP membuat permintaan mereka ditolak (429).
+const crypto = require('crypto');
+const rateKey = (req) => {
+  const tok = (req.get('authorization') || '').replace(/^Bearer\s+/i, '') || req.cookies?.sw_session || req.cookies?.sw_admin || req.query?.t;
+  if (tok) return `u:${crypto.createHash('sha1').update(String(tok)).digest('hex').slice(0, 20)}`;
+  const ip = req.ip || '';
+  return `ip:${ip.includes(':') ? ip.split(':').slice(0, 4).join(':') : ip}`; // IPv6: per /64
+};
+
 // Router API (mendukung akses langsung /api maupun dengan subpath prefix seperti /soundwave/api)
 const apiRouter = express.Router();
-apiRouter.use(rateLimit({ windowMs: 60 * 1000, limit: 300, standardHeaders: 'draft-7', legacyHeaders: false }));
+apiRouter.use(rateLimit({
+  windowMs: 60 * 1000, limit: Number(process.env.RATE_LIMIT_PER_MIN || 600), standardHeaders: 'draft-7', legacyHeaders: false,
+  keyGenerator: rateKey,
+  // Streaming (Range request lagu/radio) tidak dihitung: satu lagu bisa memicu banyak permintaan potongan
+  skip: (req) => /^\/(library\/stream|radio\/stream|sholat\/adzan\/)/.test(req.path),
+  message: { error: 'Terlalu banyak permintaan. Tunggu sebentar lalu coba lagi.', code: 'RATE_LIMITED' },
+}));
 apiRouter.use('/auth', require('./routes/auth'));
 apiRouter.use('/drive', require('./routes/drive'));
 apiRouter.use('/library', require('./routes/library'));

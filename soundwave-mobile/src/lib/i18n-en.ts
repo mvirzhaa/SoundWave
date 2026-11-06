@@ -1,5 +1,10 @@
 /** Kamus bahasa Inggris: kunci = teks asli bahasa Indonesia (lihat lib/i18n.ts). */
 export const EN: Record<string, string> = {
+  "tersimpan di server SoundWave": "saved on the SoundWave server",
+  "Gagal memuat playlist.": "Couldn't load playlists.",
+  "Terakhir Diputar": "Recently Played",
+  "surat": "surahs",
+  "Terlalu banyak permintaan. Tunggu sebentar lalu coba lagi.": "Too many requests. Wait a moment and try again.",
   "Pengumuman": "Announcements",
   "PENGUMUMAN": "ANNOUNCEMENT",
   "PENGUMUMAN PENTING": "IMPORTANT ANNOUNCEMENT",

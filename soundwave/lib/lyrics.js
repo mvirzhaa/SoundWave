@@ -4,7 +4,10 @@
  *  1. LRCLIB (lrclib.net) — database lirik tersinkron gratis, dicocokkan dengan artis + judul + durasi.
  *  2. Subtitle YouTube (untuk lagu yang punya ID video) — subtitle unggahan pemilik video dalam bahasa
  *     asli lagu; bila tidak ada, subtitle otomatis YouTube (ditandai "otomatis", akurasi lebih rendah).
- * Hasil (termasuk "tidak ditemukan") disimpan di SQLite agar tiap lagu cukup dicari sekali.
+ * Urutan: DATABASE LIRIK SERVER dulu (lintas pengguna & HP) → baru sumber luar bila belum ada.
+ * Setiap lirik yang berhasil ditemukan disimpan ke tabel lyrics_db (judul & artis dinormalisasi + durasi),
+ * sehingga pengguna lain dengan lagu yang sama — walau nama filenya beda ("(Official Video)", "Artis - Judul",
+ * "feat. …") — langsung mendapatkannya dari server. "Tidak ditemukan" disimpan sementara (3 hari).
  */
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -90,10 +93,11 @@ async function lrclibFetch(pathAndQuery) {
 
 function fromLrclib(r) {
   if (!r) return null;
-  if (r.instrumental) return { source: 'lrclib', synced: false, instrumental: true, lines: [], plain: '' };
+  const dur = Number(r.duration) > 0 ? Math.round(Number(r.duration)) : null;
+  if (r.instrumental) return { source: 'lrclib', synced: false, instrumental: true, lines: [], plain: '', duration: dur };
   const lines = parseLrc(r.syncedLyrics);
-  if (lines.length) return { source: 'lrclib', synced: true, lines, plain: r.plainLyrics || '' };
-  if (r.plainLyrics) return { source: 'lrclib', synced: false, lines: [], plain: r.plainLyrics };
+  if (lines.length) return { source: 'lrclib', synced: true, lines, plain: r.plainLyrics || '', duration: dur };
+  if (r.plainLyrics) return { source: 'lrclib', synced: false, lines: [], plain: r.plainLyrics, duration: dur };
   return null;
 }
 
@@ -174,36 +178,143 @@ async function youtube(videoId) {
 /* ---------- Resolusi ---------- */
 const inflight = new Map(); // cegah pencarian ganda untuk lagu yang sama secara bersamaan
 
+/* ---------- Database lirik bersama ---------- */
+
+const NOISE = /\b(official|video|music video|lyric|lyrics|lirik|audio|visualizer|mv|hd|hq|4k|remaster(ed)?(\s+\d{4})?|explicit|clean|full song|versi?on? asli|original|cover art)\b/i;
 /**
- * Cari lirik untuk satu lagu.
+ * Normalisasi judul agar varian nama file/video dari lagu yang sama dikenali sama:
+ * buang "(Official Video)", "[Lirik]", "feat. X", "| Topic", prefiks "Artis - " dan ekstensi file.
+ */
+function cleanTitle(title, artist) {
+  let t = String(title || '').replace(/\.(mp3|m4a|flac|ogg|wav|opus|aac)$/i, '');
+  t = t.replace(/[([{【][^)\]}】]*[)\]}】]/g, (m) => (NOISE.test(m) || /feat\.?|ft\.?|prod\.?/i.test(m) ? ' ' : m));
+  t = t.replace(/\s[|｜•·]\s.*$/, ' ');
+  t = t.replace(/\s(feat\.?|ft\.?|featuring)\s.*$/i, ' ');
+  const a = norm(artist);
+  const parts = t.split(/\s[-–—]\s/);
+  if (parts.length > 1) {
+    // "Artis - Judul" → "Judul" (bila bagian depan sama dengan artis, atau artis tidak diketahui)
+    if (!a || a === 'tidak diketahui' || norm(parts[0]) === a || a.includes(norm(parts[0])) || norm(parts[0]).includes(a)) t = parts.slice(1).join(' - ');
+  }
+  return norm(t.replace(NOISE, ' ')) || norm(title);
+}
+function cleanArtist(artist) {
+  const a = norm(String(artist || '').replace(/\s*-\s*topic$/i, '').replace(/\s(feat\.?|ft\.?|&|x|,)\s.*$/i, ''));
+  return a === 'tidak diketahui' || a === 'unknown' || a === 'unknown artist' ? '' : a;
+}
+function similar(a, b) {
+  if (!a || !b) return false;
+  if (a === b || a.includes(b) || b.includes(a)) return true;
+  const grams = (x) => { const g = new Set(); for (let i = 0; i < x.length - 1; i++) g.add(x.slice(i, i + 2)); return g; };
+  const A = grams(a); const B = grams(b);
+  let n = 0; A.forEach((g) => { if (B.has(g)) n++; });
+  return (2 * n) / (A.size + B.size || 1) >= 0.8;
+}
+
+const qByYt = db.prepare('SELECT * FROM lyrics_db WHERE yt_id = ? ORDER BY synced DESC, hits DESC LIMIT 1');
+const qByTitle = db.prepare('SELECT * FROM lyrics_db WHERE title_norm = ? LIMIT 50');
+const qHit = db.prepare('UPDATE lyrics_db SET hits = hits + 1, last_hit_at = ? WHERE id = ?');
+const qInsert = db.prepare(`INSERT INTO lyrics_db (artist_norm, title_norm, artist, title, duration, yt_id, source, synced, instrumental, data, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+const qUpdate = db.prepare('UPDATE lyrics_db SET source = ?, synced = ?, instrumental = ?, data = ?, duration = COALESCE(?, duration), yt_id = COALESCE(yt_id, ?), updated_at = ? WHERE id = ?');
+
+const SYNC_TOL = 8; // detik: lirik tersinkron hanya cocok untuk versi lagu dengan durasi hampir sama
+const PLAIN_TOL = 60;
+
+function pickRow(rows, { artistN, duration }) {
+  const cand = rows
+    .filter((r) => !artistN || !r.artist_norm || similar(r.artist_norm, artistN))
+    .map((r) => ({ r, diff: duration && r.duration ? Math.abs(r.duration - duration) : 0 }))
+    .filter(({ r, diff }) => diff <= (r.synced ? SYNC_TOL : PLAIN_TOL));
+  cand.sort((x, y) => Number(Boolean(y.r.artist_norm === artistN)) - Number(Boolean(x.r.artist_norm === artistN))
+    || y.r.synced - x.r.synced || x.diff - y.diff || y.r.hits - x.r.hits);
+  return cand[0]?.r || null;
+}
+
+/** Cari di database server. */
+function fromDb({ title, artist, duration, ytId }) {
+  let row = ytId ? qByYt.get(ytId) : null;
+  const titleN = cleanTitle(title, artist);
+  const artistN = cleanArtist(artist);
+  if (!row && titleN) row = pickRow(qByTitle.all(titleN), { artistN, duration });
+  if (!row) return null;
+  qHit.run(Date.now(), row.id);
+  return { ...JSON.parse(row.data), server: true, dbId: row.id, hits: row.hits + 1 };
+}
+
+/** Simpan / perbarui lirik di database server (dipanggil setiap kali sumber luar berhasil). */
+function toDb({ title, artist, duration, ytId }, result, { replace = false } = {}) {
+  if (!result) return;
+  const titleN = cleanTitle(title, artist);
+  if (!titleN) return;
+  const artistN = cleanArtist(artist);
+  const dur = result.duration || (duration ? Math.round(duration) : null);
+  // Subtitle otomatis YouTube hanya dikaitkan ke videonya (akurasinya rendah untuk dipakai lagu lain)
+  const ytOnly = result.source === 'youtube-auto';
+  const { server, dbId, hits, ...clean } = result; // eslint-disable-line no-unused-vars
+  const data = JSON.stringify(clean);
+  const now = Date.now();
+  const same = qByTitle.all(titleN).find((r) => (r.artist_norm || '') === artistN
+    && (!dur || !r.duration || Math.abs(r.duration - dur) <= 2) && (!ytOnly || r.yt_id === ytId));
+  if (same) {
+    // Jangan menurunkan kualitas: lirik tersinkron tidak diganti lirik biasa, kecuali "Cari ulang"
+    if (replace || (!same.synced && result.synced) || same.source === 'youtube-auto') {
+      qUpdate.run(result.source, result.synced ? 1 : 0, result.instrumental ? 1 : 0, data, dur, ytId || null, now, same.id);
+    }
+    return same.id;
+  }
+  const r = qInsert.run(artistN, titleN, String(artist || '').slice(0, 200), String(title || '').slice(0, 300), dur, ytId || null,
+    result.source, result.synced ? 1 : 0, result.instrumental ? 1 : 0, data, now, now);
+  return Number(r.lastInsertRowid);
+}
+
+/**
+ * Cari lirik untuk satu lagu: database server → (bila belum ada) LRCLIB → subtitle YouTube.
  * @param {{title:string, artist?:string, album?:string, duration?:number, ytId?:string, refresh?:boolean}} t
  */
-async function find(t) {
-  const title = String(t.title || '').trim();
+async function find(t0) {
+  const title = String(t0.title || '').trim();
   if (!title) return null;
-  const mKey = `m:${crypto.createHash('sha1').update(`${norm(t.artist)}|${norm(title)}`).digest('hex')}`;
+  // Artis tidak diketahui tapi judul berbentuk "Artis - Judul" (umum pada file hasil unduhan) → pakai bagian depan
+  const t = { ...t0 };
+  if (!cleanArtist(t.artist)) {
+    const parts = title.replace(/\.(mp3|m4a|flac|ogg|wav|opus|aac)$/i, '').split(/\s[-–—]\s/);
+    if (parts.length > 1 && parts[0].length <= 60) t.artist = parts[0].trim();
+  }
+  const mKey = `m:${crypto.createHash('sha1').update(`${cleanArtist(t.artist)}|${cleanTitle(title, t.artist)}`).digest('hex')}`;
   const yKey = t.ytId ? `yt:${t.ytId}` : null;
   if (!t.refresh) {
+    // 1) Database lirik bersama
+    const hit = fromDb({ ...t, title });
+    if (hit) return hit;
+    // 2) Cache lama (versi sebelumnya) → pindahkan ke database bersama
     for (const k of [yKey, mKey]) {
       const c = cached(k);
-      if (c) return c;
+      if (c) { toDb({ ...t, title }, c); return c; }
     }
+    // 3) Baru-baru ini sudah dicari & memang tidak ada → jangan cari ke luar lagi (3 hari)
     if (cached(mKey) === null && (!yKey || cached(yKey) === null)) return null;
   }
   const flightKey = yKey || mKey;
   if (inflight.has(flightKey)) return inflight.get(flightKey);
+  const save = (res, keys) => { store(keys, res); toDb({ ...t, title }, res, { replace: Boolean(t.refresh) }); return { ...res, server: false }; };
   const p = (async () => {
     let result = null;
     const errors = [];
-    try { result = await lrclib({ ...t, title }); } catch (e) { errors.push(e.message); }
-    if (result && (result.synced || result.instrumental || !yKey)) { store([mKey, yKey], result); return result; }
+    // LRCLIB dicari dengan judul yang sudah dibersihkan (lebih sering cocok) — fallback judul asli
+    const cleanT = cleanTitle(title, t.artist);
+    try {
+      result = await lrclib({ ...t, title: cleanT && cleanT !== norm(title) ? cleanTitleText(title, t.artist) : title });
+      if (!result && cleanT !== norm(title)) result = await lrclib({ ...t, title });
+    } catch (e) { errors.push(e.message); }
+    if (result && (result.synced || result.instrumental || !yKey)) return save(result, [mKey, yKey]);
     // LRCLIB kosong atau hanya lirik tanpa waktu → coba subtitle YouTube yang tersinkron
     if (yKey) {
       let ytRes = null;
       try { ytRes = await youtube(t.ytId); } catch (e) { errors.push(e.message); }
-      if (ytRes) { store([yKey], ytRes); return ytRes; }
+      if (ytRes) return save(ytRes, ytRes.auto ? [yKey] : [yKey, mKey]);
     }
-    if (result) { store([mKey, yKey], result); return result; }
+    if (result) return save(result, [mKey, yKey]);
     // Simpan "tidak ditemukan" hanya bila semua sumber benar-benar menjawab (bukan error jaringan)
     if (!errors.length) store([mKey, yKey], null);
     else if (!result) throw Object.assign(new Error('Sumber lirik tidak dapat dihubungi. Coba lagi nanti.'), { status: 502, code: 'LYRICS_UNREACHABLE' });
@@ -213,4 +324,44 @@ async function find(t) {
   return p;
 }
 
-module.exports = { find, parseLrc, parseVtt, pickSubtitle };
+/** Versi teks (bukan dinormalisasi) dari judul bersih — untuk dikirim ke LRCLIB. */
+function cleanTitleText(title, artist) {
+  let t = String(title || '').replace(/\.(mp3|m4a|flac|ogg|wav|opus|aac)$/i, '');
+  t = t.replace(/[([{【][^)\]}】]*[)\]}】]/g, (m) => (NOISE.test(m) || /feat\.?|ft\.?|prod\.?/i.test(m) ? ' ' : m));
+  t = t.replace(/\s[|｜•·]\s.*$/, ' ').replace(/\s(feat\.?|ft\.?|featuring)\s.*$/i, ' ');
+  const a = norm(artist);
+  const parts = t.split(/\s[-–—]\s/);
+  if (parts.length > 1 && (!a || a === 'tidak diketahui' || norm(parts[0]) === a || a.includes(norm(parts[0])) || norm(parts[0]).includes(a))) t = parts.slice(1).join(' - ');
+  return t.replace(/\s+/g, ' ').trim() || title;
+}
+
+/* ---------- Untuk panel admin ---------- */
+const qStats = db.prepare(`SELECT COUNT(*) AS total, SUM(synced) AS synced, SUM(hits) AS hits,
+  SUM(source = 'lrclib') AS lrclib, SUM(source LIKE 'youtube%') AS youtube FROM lyrics_db`);
+const qList = db.prepare(`SELECT id, artist, title, duration, yt_id, source, synced, instrumental, hits, created_at, last_hit_at FROM lyrics_db
+  WHERE (? = '' OR title LIKE ? OR artist LIKE ? OR title_norm LIKE ?) ORDER BY hits DESC, id DESC LIMIT ? OFFSET ?`);
+const qCount = db.prepare(`SELECT COUNT(*) AS n FROM lyrics_db WHERE (? = '' OR title LIKE ? OR artist LIKE ? OR title_norm LIKE ?)`);
+const qGet = db.prepare('SELECT * FROM lyrics_db WHERE id = ?');
+const qDel = db.prepare('DELETE FROM lyrics_db WHERE id = ?');
+const qDelLegacy = db.prepare('DELETE FROM lyrics WHERE key = ? OR key = ?');
+
+const admin = {
+  stats: () => { const r = qStats.get(); return { total: r.total || 0, synced: r.synced || 0, hits: r.hits || 0, lrclib: r.lrclib || 0, youtube: r.youtube || 0 }; },
+  list(q, page = 1, per = 50) {
+    const s = String(q || '').trim().slice(0, 80);
+    const like = `%${s.replace(/[%_]/g, '')}%`;
+    const likeN = `%${norm(s)}%`;
+    return { total: qCount.get(s, like, like, likeN).n, items: qList.all(s, like, like, likeN, per, (page - 1) * per) };
+  },
+  get: (id) => { const r = qGet.get(id); return r ? { ...r, data: JSON.parse(r.data) } : null; },
+  /** Hapus lirik yang salah: berikutnya akan dicari ulang dari sumber luar. */
+  remove(id) {
+    const r = qGet.get(id);
+    if (!r) return false;
+    qDel.run(id);
+    qDelLegacy.run(`m:${crypto.createHash('sha1').update(`${r.artist_norm}|${r.title_norm}`).digest('hex')}`, r.yt_id ? `yt:${r.yt_id}` : '-');
+    return true;
+  },
+};
+
+module.exports = { find, parseLrc, parseVtt, pickSubtitle, cleanTitle, cleanArtist, admin };

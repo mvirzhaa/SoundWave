@@ -138,7 +138,7 @@ function SongLyrics({ track }: { track: Track }) {
 
   const head = (
     <View style={s.head}>
-      <Text style={s.source} numberOfLines={1}>{T(SOURCE_LABEL[data.source || ''] || data.source || '')}</Text>
+      <Text style={s.source} numberOfLines={1}>{T(SOURCE_LABEL[data.source || ''] || data.source || '')}{(data as any).server ? ` · ${T('tersimpan di server SoundWave')}` : ''}</Text>
       {data.synced ? (
         <View style={s.offset}>
           <Pressable hitSlop={8} onPress={() => nudge(-0.5)} accessibilityLabel={T("Lirik lebih awal")}><Ionicons name="remove" size={18} color={C.text} /></Pressable>

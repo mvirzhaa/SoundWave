@@ -85,7 +85,7 @@ function route() {
   view.textContent = '';
   const page = h('section.page.admin');
   view.append(page);
-  ({ ringkasan, pengguna, adzan, pengumuman, akun }[sec] || ringkasan)(page);
+  ({ ringkasan, pengguna, adzan, lirik, pengumuman, akun }[sec] || ringkasan)(page);
 }
 window.addEventListener('hashchange', () => { if (me) route(); });
 
@@ -101,7 +101,8 @@ async function ringkasan(page) {
       card('Pengguna', s.users?.total ?? 0, `${s.users?.aktif ?? 0} aktif · ${s.users?.nonaktif ?? 0} nonaktif`),
       card('Aktif 7 hari', s.users?.aktif7 ?? 0, 'membuka web/aplikasi'),
       card('Terhubung Drive', s.users?.drive ?? 0, 'login Google / link folder'),
-      card('Perangkat HP', s.perangkat ?? 0, 'menerima push notification')),
+      card('Perangkat HP', s.perangkat ?? 0, 'menerima push notification'),
+      card('Lirik di server', s.lirik?.total ?? 0, `${s.lirik?.synced ?? 0} tersinkron · dipakai ulang ${s.lirik?.hits ?? 0}×`)),
     h('div.panel-card', {},
       h('h3', { text: 'Suara adzan global' }),
       h('div.status-line', {}, h(`span.dot.${s.adzan?.tersedia ? 'ok' : 'warn'}`), h('span', { text: s.adzan?.tersedia ? `Umum: ${s.adzan.nama?.umum}` : 'Belum ada suara adzan umum' })),
@@ -206,6 +207,64 @@ async function adzan(page) {
         h('p.hint', { text: 'Format: MP3 / M4A / OGG / WAV, maks. 20 MB. Gunakan rekaman yang Anda miliki atau berlisensi bebas.' })));
   };
   try { st = await api('/adzan'); draw(); } catch (e) { body.append(h('p.state.err', { text: e.message })); }
+}
+
+/* ---------- Database lirik ---------- */
+function lirik(page) {
+  let q = ''; let pageNo = 1;
+  const input = h('input', { type: 'search', placeholder: 'Cari judul atau artis…', 'aria-label': 'Cari lirik' });
+  const head = h('div');
+  const box = h('div');
+  input.addEventListener('input', debounce(() => { q = input.value.trim(); pageNo = 1; load(); }, 300));
+  page.append(h('h2', { text: 'Database lirik' }), head,
+    h('div.admin-tools', {}, h('div.search-box.admin-search', {}, icon(['M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z', 'm20 20-3.5-3.5']), input)), box);
+  const SRC = { lrclib: 'LRCLIB', youtube: 'Subtitle YouTube', 'youtube-auto': 'YouTube otomatis' };
+  const fmtDur = (s) => (s ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : '–');
+
+  async function load() {
+    box.textContent = '';
+    box.append(h('p.state', { text: 'Memuat…' }));
+    let r;
+    try { r = await api(`/lirik?q=${encodeURIComponent(q)}&page=${pageNo}`); } catch (e) { box.firstChild.textContent = e.message; return; }
+    head.textContent = '';
+    head.append(h('div.stats', {},
+      h('div.panel-card.stat', {}, h('small', { text: 'Lagu tersimpan' }), h('b', { text: String(r.stats.total) }), h('span.muted', { text: `${r.stats.synced} tersinkron` })),
+      h('div.panel-card.stat', {}, h('small', { text: 'Dipakai ulang dari server' }), h('b', { text: String(r.stats.hits) }), h('span.muted', { text: 'kali tanpa mencari ke luar' })),
+      h('div.panel-card.stat', {}, h('small', { text: 'Sumber' }), h('b', { text: String(r.stats.lrclib) }), h('span.muted', { text: `LRCLIB · ${r.stats.youtube} YouTube` }))),
+    h('p.hint', { text: 'Lirik yang sudah ditemukan satu pengguna disimpan di sini dan dipakai semua akun & HP. Hapus lirik yang salah agar dicari ulang dari sumber luar saat diputar berikutnya.' }));
+    box.textContent = '';
+    if (!r.items.length) { box.append(h('p.muted', { text: q ? 'Tidak ada yang cocok.' : 'Belum ada lirik tersimpan.' })); return; }
+    const table = h('div.utable.ltable', { role: 'table' },
+      h('div.urow.uhead', { role: 'row' }, ['Lagu', 'Sumber', 'Dipakai', ''].map((t) => h('span', { role: 'columnheader', text: t }))));
+    r.items.forEach((x) => {
+      const preview = h('pre.lyr-preview', { hidden: true });
+      table.append(h('div.urow', { role: 'row' },
+        h('span.ucell', { role: 'cell' }, h('b', { text: x.title }), h('small', { text: `${x.artist || 'Artis tidak diketahui'} · ${fmtDur(x.duration)}` }), preview),
+        h('span', { role: 'cell', text: `${SRC[x.source] || x.source}${x.instrumental ? ' · instrumental' : x.synced ? ' · tersinkron' : ' · teks'}` }),
+        h('span', { role: 'cell', text: `${x.hits}×`, title: `Terakhir ${fmtTime(x.lastHitAt)}` }),
+        h('span.btn-row', { role: 'cell' },
+          h('button.link', { type: 'button', text: 'Lihat', onclick: async (e) => {
+            if (!preview.hidden) { preview.hidden = true; e.target.textContent = 'Lihat'; return; }
+            try {
+              const d = (await api(`/lirik/${x.id}`)).data;
+              preview.textContent = d.synced ? d.lines.map((l) => `[${Math.floor(l.t / 60)}:${(l.t % 60).toFixed(1).padStart(4, '0')}] ${l.text}`).join('\n') : d.plain || '(instrumental)';
+              preview.hidden = false; e.target.textContent = 'Tutup';
+            } catch (er) { toast(er.message, { type: 'error' }); }
+          } }),
+          h('button.link.danger', { type: 'button', text: 'Hapus', onclick: async () => {
+            if (!(await confirmDialog('Hapus lirik ini?', `Lirik “${x.title}” dihapus dari server dan akan dicari ulang dari LRCLIB/YouTube saat diputar berikutnya.`, { ok: 'Hapus', danger: true }))) return;
+            try { await api(`/lirik/${x.id}`, { method: 'DELETE' }); toast('Lirik dihapus'); load(); } catch (er) { toast(er.message, { type: 'error' }); }
+          } }))));
+    });
+    box.append(table);
+    if (r.pages > 1) {
+      box.append(h('div.btn-row.pager', {},
+        h('button.btn', { type: 'button', text: '← Sebelumnya', disabled: pageNo <= 1, onclick: () => { pageNo--; load(); } }),
+        h('span.muted', { text: `Halaman ${r.page} / ${r.pages}` }),
+        h('button.btn', { type: 'button', text: 'Berikutnya →', disabled: pageNo >= r.pages, onclick: () => { pageNo++; load(); } })));
+    }
+  }
+  load();
 }
 
 /* ---------- Pengumuman ---------- */

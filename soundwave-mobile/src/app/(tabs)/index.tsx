@@ -40,7 +40,20 @@ export default function LibraryScreen() {
   const [playlists, setPlaylists] = useState<{ special: PlaylistSummary[]; playlists: PlaylistSummary[] } | null>(null);
   const { width } = useWindowDimensions();
 
-  const loadPlaylists = useCallback(() => { get('/api/library/playlists').then(setPlaylists).catch(() => {}); }, []);
+  const [plError, setPlError] = useState('');
+  const [plLoading, setPlLoading] = useState(false);
+  const loadPlaylists = useCallback(async (attempt = 0): Promise<void> => {
+    setPlLoading(true);
+    try {
+      const r = await get<{ special: PlaylistSummary[]; playlists: PlaylistSummary[] }>('/api/library/playlists', { timeout: 20000 });
+      setPlaylists({ special: r.special || [], playlists: r.playlists || [] });
+      setPlError('');
+    } catch (e: any) {
+      // Satu kali coba ulang otomatis (jaringan sesaat terputus / server sibuk), lalu tampilkan pesan
+      if (attempt < 1) { await new Promise((ok) => setTimeout(ok, 1500)); return loadPlaylists(attempt + 1); }
+      setPlError(e.message || T('Gagal memuat playlist.'));
+    } finally { setPlLoading(false); }
+  }, []);
   useFocusEffect(useCallback(() => { if (tab === 'playlist') loadPlaylists(); }, [tab, lib.playlistsVersion, loadPlaylists]));
 
   const d = user?.drive;
@@ -194,7 +207,13 @@ export default function LibraryScreen() {
     const col = Math.max(2, Math.floor((width - 28) / 170));
     const size = (width - 28 - (col - 1) * 14) / col;
     const f = norm(filter);
-    const all = playlists ? [...playlists.special, ...playlists.playlists].filter((p) => !f || norm(p.name).includes(f)) : [];
+    // Playlist bawaan selalu tampil walau daftar dari server belum/tidak termuat
+    const special: PlaylistSummary[] = playlists?.special?.length ? playlists.special : [
+      { id: 'recent', name: 'Terakhir Diputar', count: 0, covers: [], special: true },
+      { id: 'favorites', name: 'Favorit', count: lib.favorites.size, covers: [], special: true },
+      { id: 'quran', name: 'Hapalan Quran', count: 38, covers: [], special: true, quran: true },
+    ];
+    const all = [...special, ...(playlists?.playlists || [])].filter((p) => !f || norm(T(p.name)).includes(f) || norm(p.name).includes(f));
     const createPl = async () => {
       const name = await ui.prompt({ title: T('Playlist baru'), placeholder: T('Nama playlist'), ok: T('Buat') });
       if (!name) return;
@@ -203,6 +222,13 @@ export default function LibraryScreen() {
     return (
       <ScrollView refreshControl={refresh} contentContainerStyle={{ paddingBottom: 24 }}>
         {header}
+        {plError ? (
+          <Pressable style={s.plErr} onPress={() => loadPlaylists()}>
+            <Ionicons name="cloud-offline-outline" size={20} color={C.warn} />
+            <Text style={{ color: C.text, flex: 1 }}>{plError}</Text>
+            <Text style={{ color: C.accent, fontWeight: '700' }}>{plLoading ? '…' : T('Coba lagi')}</Text>
+          </Pressable>
+        ) : null}
         <View style={[s.grid, { gap: 14 }]}>
           <Pressable onPress={createPl} style={{ width: size }}>
             <View style={[s.newPl, { width: size, height: size }]}><Ionicons name="add" size={44} color={C.accent} /></View>
@@ -212,8 +238,8 @@ export default function LibraryScreen() {
             <Pressable key={String(p.id)} style={{ width: size }} onPress={() => router.push(p.quran ? '/quran' : `/playlist/${p.id}`)}>
               {p.quran ? <Cover quran="القرآن" size={size} radius={14} />
                 : <Collage ids={p.covers} size={size} icon={p.id === 'favorites' ? 'heart' : p.id === 'recent' ? 'time-outline' : 'musical-notes'} />}
-              <Text style={s.plName} numberOfLines={1}>{p.name}</Text>
-              <Text style={s.plCount}>{p.count} {p.quran ? 'surat' : 'lagu'}</Text>
+              <Text style={s.plName} numberOfLines={1}>{p.special ? T(p.name) : p.name}</Text>
+              <Text style={s.plCount}>{p.count} {p.quran ? T('surat') : T('lagu')}</Text>
             </Pressable>
           ))}
         </View>
@@ -279,6 +305,7 @@ export default function LibraryScreen() {
 }
 
 const s = themed(() => StyleSheet.create({
+  plErr: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 14, marginBottom: 12, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
   sources: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingTop: 4, paddingBottom: 10 },
   srcChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
   srcOn: { borderColor: C.accent, backgroundColor: 'rgba(139,109,255,.14)' },

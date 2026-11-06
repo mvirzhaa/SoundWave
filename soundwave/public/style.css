@@ -626,6 +626,8 @@ body.has-mini .toast { bottom: calc(var(--mini-h) + 24px); }
 .ann-head { display: flex; align-items: center; gap: 10px; }
 .ann-head b { flex: 1; }
 .badge-penting { font-size: 11px; font-weight: 800; color: #fff; background: #f59e0b; padding: 2px 8px; border-radius: 999px; }
+.ltable .urow { grid-template-columns: minmax(220px, 2.4fr) 1.3fr 80px 130px; }
+.lyr-preview { margin: 8px 0 0; padding: 10px 12px; max-height: 260px; overflow: auto; background: var(--surface-2); border-radius: 10px; font-size: 12px; line-height: 1.5; white-space: pre-wrap; color: var(--text); }
 /* Pop-up pengumuman untuk pengguna web */
 .ann-pop { display: grid; gap: 12px; }
 .ann-pop .ann-body { white-space: pre-wrap; line-height: 1.55; color: var(--text); margin: 0; max-height: 50vh; overflow: auto; }
