@@ -5,15 +5,33 @@ import { apiUrl } from './api.js';
 const $ = (id) => document.getElementById(id);
 const view = $('adminView');
 
+let adminToken = (() => {
+  try { return sessionStorage.getItem('sw_admin_token') || null; } catch { return null; }
+})();
+
+function setAdminToken(t) {
+  adminToken = t;
+  try {
+    if (t) sessionStorage.setItem('sw_admin_token', t);
+    else sessionStorage.removeItem('sw_admin_token');
+  } catch { /* abaikan */ }
+}
+
 /* ---------- API khusus admin (cookie sw_admin, path /api/admin) ---------- */
 async function api(path, { method = 'GET', body, raw, headers = {} } = {}) {
-  const opts = { method, credentials: 'same-origin', headers: { 'X-SW-CSRF': '1', ...headers } };
+  const authHeaders = {};
+  if (adminToken) authHeaders['Authorization'] = `Bearer ${adminToken}`;
+  const opts = { method, credentials: 'same-origin', headers: { 'X-SW-CSRF': '1', ...authHeaders, ...headers } };
   if (raw) opts.body = raw;
   else if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
   let res;
   try { res = await fetch(apiUrl(`/api/admin${path}`), opts); } catch { throw new Error('Tidak dapat terhubung ke server.'); }
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401 && data.code === 'ADMIN_UNAUTHENTICATED' && path !== '/login') { showLogin(); throw new Error(data.error); }
+  if (res.status === 401 && data.code === 'ADMIN_UNAUTHENTICATED' && path !== '/login') {
+    setAdminToken(null);
+    showLogin();
+    throw new Error(data.error);
+  }
   if (!res.ok) throw new Error(data.error || `Kesalahan ${res.status}`);
   return data;
 }
@@ -37,7 +55,8 @@ form.addEventListener('submit', async (e) => {
   $('adminErr').hidden = true;
   $('adminSubmit').disabled = true;
   try {
-    await api('/login', { method: 'POST', body: { email: form.email.value, password: form.password.value } });
+    const res = await api('/login', { method: 'POST', body: { email: form.email.value, password: form.password.value } });
+    if (res?.token) setAdminToken(res.token);
     form.password.value = '';
     enter();
   } catch (er) { $('adminErr').textContent = er.message; $('adminErr').hidden = false; }
@@ -254,7 +273,12 @@ function akun(page) {
       try { await api('/password', { method: 'POST', body: { current: cur.value, next: nxt.value } }); cur.value = ''; nxt.value = ''; toast('Kata sandi admin diganti'); }
       catch (er) { toast(er.message, { type: 'error' }); }
     } }, h('h3', { text: 'Ganti kata sandi' }), h('label.field', {}, h('span', { text: 'Kata sandi lama' }), cur), h('label.field', {}, h('span', { text: 'Kata sandi baru (min. 10)' }), nxt), h('button.btn', { type: 'submit', text: 'Ganti kata sandi' })),
-    h('button.btn', { type: 'button', text: 'Keluar dari panel admin', onclick: async () => { await api('/logout', { method: 'POST' }).catch(() => {}); me = null; showLogin(); } }));
+    h('button.btn', { type: 'button', text: 'Keluar dari panel admin', onclick: async () => {
+      await api('/logout', { method: 'POST' }).catch(() => {});
+      setAdminToken(null);
+      me = null;
+      showLogin();
+    } }));
 }
 
 /* ---------- Mulai ---------- */

@@ -20,8 +20,8 @@ const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHe
 r.post('/login', loginLimiter, (req, res) => {
   const a = ADM.login(req.body?.email, req.body?.password);
   if (!a) return res.status(401).json({ error: 'Email atau kata sandi admin salah.' });
-  ADM.setCookie(res, a);
-  res.json({ admin: ADM.publicAdmin(a) });
+  const token = ADM.setCookie(res, a);
+  res.json({ admin: ADM.publicAdmin(a), token });
 });
 r.post('/logout', (req, res) => { ADM.clearCookie(res); res.json({ ok: true }); });
 r.get('/me', admin, (req, res) => res.json({ admin: ADM.publicAdmin(req.admin) }));

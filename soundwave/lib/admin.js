@@ -53,23 +53,36 @@ function login(email, password) {
 
 const tokenFor = (a) => jwt.sign({ sub: a.id, v: a.token_version, typ: 'admin' }, cfg.JWT_KEY, { algorithm: 'HS256', expiresIn: TTL });
 
+const COOKIE_PATH = cfg.BASE_PATH ? `${cfg.BASE_PATH}/` : '/';
+
 function setCookie(res, a) {
-  res.cookie(COOKIE, tokenFor(a), { httpOnly: true, sameSite: 'strict', secure: cfg.SECURE_COOKIE, maxAge: TTL * 1000, path: '/api/admin' });
+  const token = tokenFor(a);
+  res.cookie(COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: cfg.SECURE_COOKIE, maxAge: TTL * 1000, path: COOKIE_PATH });
+  return token;
 }
 function clearCookie(res) {
-  res.clearCookie(COOKIE, { httpOnly: true, sameSite: 'strict', secure: cfg.SECURE_COOKIE, path: '/api/admin' });
+  res.clearCookie(COOKIE, { httpOnly: true, sameSite: 'lax', secure: cfg.SECURE_COOKIE, path: COOKIE_PATH });
 }
 
 /** Middleware: hanya superadmin. Token pengguna biasa TIDAK diterima di sini. */
 function requireAdmin() {
   return (req, res, next) => {
     let a = null;
+    let via = null;
+    const h = req.headers.authorization || '';
+    let rawToken = '';
+    if (h.startsWith('Bearer ')) { rawToken = h.slice(7); via = 'bearer'; }
+    else if (req.cookies?.[COOKIE]) { rawToken = req.cookies[COOKIE]; via = 'cookie'; }
+
     try {
-      const p = jwt.verify(req.cookies?.[COOKIE] || '', cfg.JWT_KEY, { algorithms: ['HS256'] });
+      const p = jwt.verify(rawToken, cfg.JWT_KEY, { algorithms: ['HS256'] });
       if (p.typ === 'admin') { const row = byId.get(p.sub); if (row && row.token_version === p.v) a = row; }
     } catch { /* tidak sah */ }
+
     if (!a) return res.status(401).json({ error: 'Sesi admin berakhir. Silakan masuk lagi.', code: 'ADMIN_UNAUTHENTICATED' });
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.get('X-SW-CSRF') !== '1') return res.status(403).json({ error: 'Permintaan ditolak (CSRF).' });
+    if (via === 'cookie' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.get('X-SW-CSRF') !== '1') {
+      return res.status(403).json({ error: 'Permintaan ditolak (CSRF).' });
+    }
     req.admin = a;
     next();
   };
