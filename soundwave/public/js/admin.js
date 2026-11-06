@@ -46,7 +46,14 @@ form.addEventListener('submit', async (e) => {
 
 let me = null;
 async function enter() {
-  try { me = (await api('/me')).admin; } catch { return; }
+  try {
+    const r = await api('/me');
+    if (!r?.admin) throw new Error('Bukan admin');
+    me = r.admin;
+  } catch {
+    showLogin();
+    return;
+  }
   $('adminLogin').hidden = true;
   $('adminApp').hidden = false;
   route();
@@ -68,20 +75,21 @@ async function ringkasan(page) {
   page.append(h('h2', { text: 'Ringkasan' }), h('p.state', { text: 'Memuat…' }));
   try {
     const s = await api('/stats');
-    page.lastChild.remove();
-    const card = (label, value, sub) => h('div.panel-card.stat', {}, h('small', { text: label }), h('b', { text: String(value) }), sub ? h('span.muted', { text: sub }) : null);
+    page.lastChild?.remove();
+    if (!s || !s.users) throw new Error('Data statistik tidak valid dari server.');
+    const card = (label, value, sub) => h('div.panel-card.stat', {}, h('small', { text: label }), h('b', { text: String(value ?? 0) }), sub ? h('span.muted', { text: sub }) : null);
     page.append(h('div.stats', {},
-      card('Pengguna', s.users.total, `${s.users.aktif} aktif · ${s.users.nonaktif} nonaktif`),
-      card('Aktif 7 hari', s.users.aktif7, 'membuka web/aplikasi'),
-      card('Terhubung Drive', s.users.drive, 'login Google / link folder'),
-      card('Perangkat HP', s.perangkat, 'menerima push notification')),
+      card('Pengguna', s.users?.total ?? 0, `${s.users?.aktif ?? 0} aktif · ${s.users?.nonaktif ?? 0} nonaktif`),
+      card('Aktif 7 hari', s.users?.aktif7 ?? 0, 'membuka web/aplikasi'),
+      card('Terhubung Drive', s.users?.drive ?? 0, 'login Google / link folder'),
+      card('Perangkat HP', s.perangkat ?? 0, 'menerima push notification')),
     h('div.panel-card', {},
       h('h3', { text: 'Suara adzan global' }),
-      h('div.status-line', {}, h(`span.dot.${s.adzan.tersedia ? 'ok' : 'warn'}`), h('span', { text: s.adzan.tersedia ? `Umum: ${s.adzan.nama.umum}` : 'Belum ada suara adzan umum' })),
-      h('div.status-line', {}, h(`span.dot.${s.adzan.subuh ? 'ok' : 'warn'}`), h('span', { text: s.adzan.subuh ? `Subuh: ${s.adzan.nama.subuh}` : 'Subuh memakai suara umum' })),
-      h('div.status-line', {}, h(`span.dot.${s.adzan.paksa ? 'ok' : 'warn'}`), h('span', { text: s.adzan.paksa ? 'Dipakai di semua akun (pilihan pengguna diabaikan)' : 'Bawaan — pengguna boleh memilih suara sendiri' })),
+      h('div.status-line', {}, h(`span.dot.${s.adzan?.tersedia ? 'ok' : 'warn'}`), h('span', { text: s.adzan?.tersedia ? `Umum: ${s.adzan.nama?.umum}` : 'Belum ada suara adzan umum' })),
+      h('div.status-line', {}, h(`span.dot.${s.adzan?.subuh ? 'ok' : 'warn'}`), h('span', { text: s.adzan?.subuh ? `Subuh: ${s.adzan.nama?.subuh}` : 'Subuh memakai suara umum' })),
+      h('div.status-line', {}, h(`span.dot.${s.adzan?.paksa ? 'ok' : 'warn'}`), h('span', { text: s.adzan?.paksa ? 'Dipakai di semua akun (pilihan pengguna diabaikan)' : 'Bawaan — pengguna boleh memilih suara sendiri' })),
       h('a.btn', { href: '#adzan', text: 'Atur suara adzan' })));
-  } catch (e) { page.lastChild.textContent = e.message; }
+  } catch (e) { if (page.lastChild) page.lastChild.textContent = e.message; }
 }
 
 /* ---------- Pengguna ---------- */

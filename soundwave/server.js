@@ -102,6 +102,14 @@ if (cfg.BASE_PATH) {
   app.use(cfg.BASE_PATH, staticMiddleware);
 }
 
+// Fallback 404 untuk semua route API agar tidak pernah mengembalikan HTML index.html
+app.use((req, res, next) => {
+  if (req.path.includes('/api/')) {
+    return res.status(404).json({ error: 'Endpoint API tidak ditemukan.' });
+  }
+  next();
+});
+
 // Fallback index.html (SPA routing)
 app.use((req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();

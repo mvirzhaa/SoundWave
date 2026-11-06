@@ -8,7 +8,10 @@ export class ApiError extends Error {
 
 // Deteksi subpath secara otomatis, misal /soundwave bila di-host di https://domain.com/soundwave/
 export const BASE_PATH = (typeof window !== 'undefined' && window.location)
-  ? window.location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '')
+  ? window.location.pathname
+      .replace(/\/admin(\.html)?\/?$/, '')
+      .replace(/\/index\.html$/, '')
+      .replace(/\/+$/, '')
   : '';
 
 export const apiUrl = (p) => {
