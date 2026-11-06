@@ -81,6 +81,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [duration, setDuration] = useState(0);
   const [shuffle, setShuffleState] = useState(false);
   const [repeat, setRepeat] = useState<Repeat>('off');
+  const repeatRef = useRef<Repeat>('off');
+  repeatRef.current = repeat;
   const [source, setSource] = useState('Pustaka');
 
   const sourceFor = useCallback((t: Track): AudioSource => {
@@ -102,12 +104,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (!t.radio && lastRecorded.current !== t.id) { lastRecorded.current = t.id; recordPlayRef.current(t); }
   }, []);
 
-  // Satu pemutar untuk seluruh umur aplikasi
-  useEffect(() => {
-    setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix' }).catch(() => {});
-    const p = createAudioPlaylist({ sources: [], updateInterval: 500, loop: 'none' });
-    pl.current = p;
+  /* ---------- Pemutar native ----------
+   * expo-audio (ExoPlayer) tidak bisa dipulihkan dari JS setelah error (mis. lagu streaming gagal saat offline):
+   * pemutar masuk status IDLE dan lagu apa pun sesudahnya tidak berbunyi. Karena itu setiap kali pengguna memilih
+   * lagu, dan setiap kali terjadi error, pemutar native dibuat BARU (yang lama dihentikan & dilepas lebih dulu). */
+  const detachRef = useRef<(() => void) | null>(null);
+  const errored = useRef(false);
+  const failStreak = useRef(0);
+
+  const attach = (p: AudioPlaylist) => {
     const s1 = p.addListener('playlistStatusUpdate', (st) => {
+      if (pl.current !== p) return;
+      if ((st as any).error && !errored.current) { errored.current = true; setTimeout(() => handleErrorRef.current(), 0); return; }
       if (AppState.currentState !== 'active') { // latar belakang: cukup lacak lagu aktif (layar kunci)
         if (st.currentIndex !== indexRef.current && st.currentIndex >= 0) onTrack(st.currentIndex);
         return;
@@ -118,19 +126,45 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setDuration(st.duration || 0);
       if (st.currentIndex !== indexRef.current && st.currentIndex >= 0) onTrack(st.currentIndex);
     });
-    const s2 = p.addListener('trackChanged', ({ currentIndex }) => onTrack(currentIndex));
+    const s2 = p.addListener('trackChanged', ({ currentIndex }) => { if (pl.current === p) onTrack(currentIndex); });
+    return () => { s1.remove(); s2.remove(); };
+  };
+
+  /** Lepas pemutar lama dengan aman lalu buat yang baru. */
+  const fresh = (): AudioPlaylist => {
+    const old = pl.current;
+    if (old) {
+      detachRef.current?.();
+      try { old.pause(); old.clear(); if (lockActive.current) old.clearLockScreenControls(); } catch { /* abaikan */ }
+      try { old.destroy(); } catch { /* abaikan */ }
+    }
+    lockActive.current = false;
+    const p = createAudioPlaylist({ sources: [], updateInterval: 500, loop: 'none' });
+    pl.current = p;
+    detachRef.current = attach(p);
+    errored.current = false;
+    return p;
+  };
+
+  useEffect(() => {
+    setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix' }).catch(() => {});
+    fresh();
     // Pengaman: baca status langsung dari pemutar tiap 500 ms (waktu, ikon play/pause, lirik tetap bergerak
     // walaupun event status dari sistem terlambat/tidak terkirim di sebagian HP Android).
     // Hanya saat aplikasi aktif di layar — di latar belakang tidak ada yang perlu digambar.
     const last = { t: -1, d: -1, pl: false, b: false };
     let poll: ReturnType<typeof setInterval> | null = null;
     const tick = () => {
+      const p = pl.current;
+      if (!p) return;
       try {
-        const t = Math.round((p.currentTime || 0) * 4) / 4;
+        const cur = p.currentTime || 0;
+        if (cur > 1.5) failStreak.current = 0; // lagu benar-benar berbunyi
+        const t = Math.round(cur * 4) / 4;
         const d = p.duration || 0;
-        const pl2 = !!p.playing;
+        const pl2 = !!p.playing && !errored.current;
         const b = !!p.isBuffering;
-        if (t !== last.t) { last.t = t; setPosition(p.currentTime || 0); }
+        if (t !== last.t) { last.t = t; setPosition(cur); }
         if (d !== last.d) { last.d = d; setDuration(d); }
         if (pl2 !== last.pl) { last.pl = pl2; setPlaying(pl2); }
         if (b !== last.b) { last.b = b; setBuffering(b); }
@@ -144,14 +178,56 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const s3 = AppState.addEventListener('change', (st) => { if (st === 'active') { tick(); startPoll(); } else stopPoll(); });
     return () => {
       stopPoll();
-      s1.remove(); s2.remove(); s3.remove();
+      s3.remove();
       if (radioWatch.current) clearTimeout(radioWatch.current);
+      detachRef.current?.();
+      const p = pl.current;
       // Hentikan suara dulu sebelum dilepas, agar tidak ada audio "yatim" yang terus berbunyi
-      try { p.pause(); p.clear(); p.clearLockScreenControls(); } catch { /* abaikan */ }
-      p.destroy();
-      if (pl.current === p) pl.current = null;
+      if (p) { try { p.pause(); p.clear(); p.clearLockScreenControls(); } catch { /* abaikan */ } p.destroy(); }
+      pl.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Bisa diputar tanpa internet: file di HP atau lagu yang sudah diunduh untuk offline. */
+  const playableOffline = (t: Track) => Boolean((t.local && t.uri) || offlineUri(t.id));
+  const needsNet = (t: Track) => !playableOffline(t);
+
+  /** Bangun ulang pemutar dengan antrean q dan mulai dari indeks i. */
+  const restartAt = (q: Track[], i: number) => {
+    const p = fresh();
+    commitQueue(q);
+    q.forEach((t) => p.add(sourceFor(t)));
+    p.loop = LOOP[repeatRef.current];
+    p.skipTo(i);
+    p.play();
+    setPlaying(true);
+    setPosition(0); setDuration(0);
+    p.setActiveForLockScreen(true, meta(q[i]), { showNextTrack: true, showPreviousTrack: true });
+    lockActive.current = true;
+    onTrack(i);
+  };
+
+  /** Lagu gagal dimuat → lanjut ke lagu berikutnya yang bisa diputar (bila gagal karena jaringan: hanya lagu offline). */
+  const handleErrorRef = useRef<() => void>(() => {});
+  handleErrorRef.current = () => {
+    const q = queueRef.current;
+    const i = indexRef.current;
+    const bad = q[i];
+    setPlaying(false); setBuffering(false);
+    if (!bad) return;
+    if (bad.radio) { say(T('{s}: stasiun tidak merespons. Coba stasiun lain.', { s: bad.title })); return; }
+    failStreak.current += 1;
+    const net = needsNet(bad);
+    say(net ? T('“{t}” tidak bisa dimuat — periksa koneksi internet.', { t: bad.title }) : T('“{t}” tidak bisa diputar.', { t: bad.title }));
+    if (failStreak.current >= 3) return; // berhenti, jangan melompati seluruh antrean
+    if (net) {
+      // Kemungkinan offline: lanjutkan hanya dengan lagu yang tersimpan di HP
+      const rest = q.slice(i + 1).filter(playableOffline);
+      if (rest.length) restartAt(rest, 0);
+      return;
+    }
+    if (i + 1 < q.length) restartAt(q, i + 1);
+  };
 
   const commitQueue = (q: Track[]) => { queueRef.current = q; setQueue(q); };
 
@@ -165,22 +241,35 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (radioWatch.current) { clearTimeout(radioWatch.current); radioWatch.current = null; }
     const seq = ++playSeq.current;
     // Token hanya perlu untuk streaming dari server; lagu di HP / offline / murottal langsung diputar tanpa menunggu
+    let list2 = list;
     const needsToken = list.some((t) => !(t.local && t.uri) && !offlineUri(t.id) && !(t.url && /^(quran|radio)-/.test(t.id)));
-    if (needsToken) { try { tokenRef.current = await mediaToken(); } catch { /* lagu offline tetap bisa diputar */ } }
+    if (needsToken) {
+      try {
+        tokenRef.current = await Promise.race([mediaToken(), new Promise<string>((_, no) => setTimeout(() => no(Object.assign(new Error('timeout'), { status: 0 })), 6000))]);
+      } catch (e: any) {
+        // Tidak ada koneksi ke server → antrean hanya berisi lagu yang bisa diputar offline
+        if (e?.status === 0 || !tokenRef.current) {
+          list2 = list.filter(playableOffline);
+          if (wanted && !playableOffline(wanted)) {
+            if (seq === playSeq.current) say(T('Sedang offline. “{t}” belum diunduh untuk offline.', { t: wanted.title }));
+            return;
+          }
+          if (!list2.length) { if (seq === playSeq.current) say(T('Sedang offline dan belum ada lagu yang diunduh.')); return; }
+        }
+      }
+    }
     // Pengguna mengetuk lagu lain selagi menunggu token → hanya ketukan terakhir yang dipakai
     if (seq !== playSeq.current) return;
-    const p = pl.current;
-    if (!p) return;
+    failStreak.current = 0;
+    const p = fresh();
     const sh = opts.shuffle ?? shuffle;
     setShuffleState(sh);
     setSource(opts.source || 'Pustaka');
-    originalRef.current = list;
-    const startIdx = wanted == null ? Math.floor(Math.random() * list.length) : Math.max(0, list.indexOf(wanted));
-    const q = sh ? [list[startIdx], ...shuffled(list.filter((_, i) => i !== startIdx))] : list;
+    originalRef.current = list2;
+    const startIdx = wanted == null ? Math.floor(Math.random() * list2.length) : Math.max(0, list2.indexOf(wanted));
+    const q = sh ? [list2[startIdx], ...shuffled(list2.filter((_, i) => i !== startIdx))] : list2;
     const begin = sh ? 0 : startIdx;
     commitQueue(q);
-    p.pause();
-    p.clear();
     q.forEach((t) => p.add(sourceFor(t)));
     const rep = opts.repeat ?? repeat;
     if (rep !== repeat) setRepeat(rep);
@@ -195,16 +284,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   /** Radio: ganti stasiun tanpa membangun ulang antrean panjang; pengawas 20 detik untuk stasiun yang mati. */
   function playRadio(list: Track[], i: number, src?: string) {
-    const p = pl.current;
-    if (!p) return;
+    if (!pl.current) return;
     const seq = ++playSeq.current;
     radioList.current = list;
     const t = list[i];
     setShuffleState(false);
     setSource(src || 'Radio');
     commitQueue([t]);
-    p.pause();
-    p.clear();
+    const p = fresh();
     p.add(sourceFor(t));
     p.loop = 'none';
     setRepeat('off');
@@ -238,21 +325,39 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
+  /** Pemutar sempat error (IDLE) → bangun ulang dari lagu i; mengembalikan true bila sudah ditangani. */
+  const recover = (i: number) => {
+    if (!errored.current) return false;
+    const q = queueRef.current;
+    if (!q.length) return true;
+    const j = Math.min(Math.max(0, i), q.length - 1);
+    if (q[j].radio) { playRadio(radioList.current.length ? radioList.current : [q[j]], Math.max(0, radioList.current.findIndex((x) => x.id === q[j].id)), source); return true; }
+    failStreak.current = 0;
+    restartAt(q, j);
+    return true;
+  };
+
   const toggle = () => {
     const p = pl.current;
     if (!p || !queueRef.current.length) return;
+    if (recover(indexRef.current)) return;
     if (p.playing) { p.pause(); setPlaying(false); } else { p.play(); setPlaying(true); }
   };
   const pause = () => { pl.current?.pause(); setPlaying(false); };
-  const resume = () => { if (queueRef.current.length) { pl.current?.play(); setPlaying(true); } };
-  const next = () => { if (radioStep(1)) return; pl.current?.next(); };
+  const resume = () => { if (queueRef.current.length) { if (recover(indexRef.current)) return; pl.current?.play(); setPlaying(true); } };
+  const next = () => {
+    if (radioStep(1)) return;
+    if (recover(indexRef.current + 1 < queueRef.current.length ? indexRef.current + 1 : 0)) return;
+    pl.current?.next();
+  };
   const prev = () => {
     if (radioStep(-1)) return;
+    if (recover(indexRef.current - 1)) return;
     const p = pl.current; if (!p) return;
     if (p.currentTime > 3 || indexRef.current === 0) p.seekTo(0); else p.previous();
   };
   const seek = (sec: number) => { pl.current?.seekTo(Math.max(0, sec)); setPosition(sec); };
-  const jumpTo = (i: number) => { pl.current?.skipTo(i); pl.current?.play(); };
+  const jumpTo = (i: number) => { if (recover(i)) return; pl.current?.skipTo(i); pl.current?.play(); };
 
   const removeAt = (i: number) => {
     if (i === indexRef.current) return;
@@ -302,17 +407,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const setRepeatMode = (m: Repeat) => { setRepeat(m); if (pl.current) pl.current.loop = LOOP[m]; };
 
   const stop = () => {
-    const p = pl.current;
-    if (!p) return;
+    if (!pl.current) return;
     playSeq.current++;
     radioList.current = [];
     if (radioWatch.current) { clearTimeout(radioWatch.current); radioWatch.current = null; }
-    p.pause();
-    p.clear();
+    fresh(); // lepas pemutar lama (termasuk yang sedang error) dan siapkan yang baru
     setPlaying(false);
     setBuffering(false);
     setPosition(0); setDuration(0);
-    if (lockActive.current) { p.clearLockScreenControls(); lockActive.current = false; }
     commitQueue([]);
     indexRef.current = -1;
     setIndex(-1);

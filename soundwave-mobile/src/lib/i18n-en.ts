@@ -348,4 +348,9 @@ export const EN: Record<string, string> = {
   "“{t}” tersedia offline": "“{t}” available offline",
   "♪ Lagu instrumental ♪": "♪ Instrumental ♪",
   "📍 Lokasi HP": "📍 Phone location",
+  "File yang diunduh bukan audio. Coba unduh ulang saat koneksi stabil.": "The downloaded file isn't audio. Try again on a stable connection.",
+  "“{t}” tidak bisa dimuat — periksa koneksi internet.": "“{t}” couldn't load — check your internet connection.",
+  "“{t}” tidak bisa diputar.": "“{t}” can't be played.",
+  "Sedang offline. “{t}” belum diunduh untuk offline.": "You're offline. “{t}” hasn't been downloaded for offline use.",
+  "Sedang offline dan belum ada lagu yang diunduh.": "You're offline and no songs have been downloaded yet.",
 };

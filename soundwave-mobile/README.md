@@ -147,3 +147,9 @@ src/
   berubah, perubahan tema sistem tidak memasang ulang layar saat aplikasi di latar belakang, sesi tetap terbuka saat
   offline (data akun terakhir disimpan), dan error tak terduga menampilkan tombol **Muat ulang**, bukan layar gelap.
 
+- **Pemulihan pemutar & offline (v9)**: pemutar native (ExoPlayer) tidak bisa dipulihkan dari JS setelah satu lagu
+  gagal dimuat, jadi aplikasi membuat pemutar **baru** setiap kali lagu dipilih dan setiap kali terjadi error.
+  Lagu yang gagal dilewati otomatis (maks. 3 kali berturut-turut). Saat server tidak terjangkau (maks. 6 detik),
+  antrean hanya berisi lagu di HP / yang sudah diunduh; lagu yang belum diunduh memberi pesan, bukan diam.
+  Unduhan offline diperiksa (ukuran & isi) — bila yang terunduh ternyata pesan error, file dihapus dan muncul
+  pesan "Gagal mengunduh". Unduhan rusak dari versi lama dibersihkan otomatis; unduh ulang lagu tersebut.

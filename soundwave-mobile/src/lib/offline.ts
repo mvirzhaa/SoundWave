@@ -2,8 +2,9 @@
  * Simpan lagu untuk diputar offline (seperti tombol unduh di CloudBeats).
  * File disimpan di folder dokumen aplikasi; indeks metadata di offline/index.json.
  */
-import { Directory, File, Paths } from 'expo-file-system';
+import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import { streamUrl } from './api';
+import { T } from './i18n';
 import type { Track } from './types';
 
 type Entry = { uri: string; track: Track; savedAt: number };
@@ -26,7 +27,7 @@ export function loadOffline() {
     ensureDir();
     if (indexFile.exists) index = JSON.parse(indexFile.textSync() || '{}');
     // Bersihkan entri yang filenya hilang
-    for (const [id, e] of Object.entries(index)) if (!new File(e.uri).exists) delete index[id];
+    for (const [id, e] of Object.entries(index)) { const f = new File(e.uri); if (!f.exists || (f.size || 0) < 32 * 1024) { try { if (f.exists) f.delete(); } catch { /* abaikan */ } delete index[id]; } }
   } catch {
     index = {};
   }
@@ -53,6 +54,21 @@ function extOf(t: Track) {
   return t.isVideo ? 'mp4' : 'mp3';
 }
 
+/** File audio/video asli berukuran wajar dan tidak diawali teks JSON/HTML. */
+function looksLikeMedia(f: File) {
+  try {
+    if (!f.exists || (f.size || 0) < 32 * 1024) return false;
+    const h = f.open(FileMode.ReadOnly);
+    try {
+      const b = h.readBytesSync(16);
+      const head = String.fromCharCode(...Array.from(b)).trimStart().toLowerCase();
+      return !(head.startsWith('{') || head.startsWith('[') || head.startsWith('<!doctype') || head.startsWith('<html'));
+    } finally { h.close(); }
+  } catch {
+    return true; // tidak bisa diperiksa → anggap valid (ukuran sudah lolos)
+  }
+}
+
 export async function downloadOffline(t: Track) {
   if (index[t.id] || downloading.has(t.id)) return;
   downloading.add(t.id);
@@ -60,7 +76,13 @@ export async function downloadOffline(t: Track) {
   try {
     ensureDir();
     const dest = new File(dir, `${t.id}.${extOf(t)}`);
+    if (dest.exists) { try { dest.delete(); } catch { /* abaikan */ } }
     const file = await File.downloadFileAsync(t.url && t.id.startsWith('quran-') ? t.url : await streamUrl(t.id), dest, { idempotent: true });
+    // Pastikan yang tersimpan benar-benar audio/video, bukan pesan error (JSON/HTML) dari server
+    if (!looksLikeMedia(file)) {
+      try { file.delete(); } catch { /* abaikan */ }
+      throw new Error(T('File yang diunduh bukan audio. Coba unduh ulang saat koneksi stabil.'));
+    }
     const { available, itemId, ...meta } = t;
     index[t.id] = { uri: file.uri, track: meta, savedAt: Date.now() };
   } finally {
