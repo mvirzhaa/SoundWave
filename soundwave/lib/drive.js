@@ -240,7 +240,7 @@ function requireFolder(user) {
 const NOISE = /\s*[([【]([^)\]】]*?(official|video|audio|lyric|lirik|visuali[sz]er|\bmv\b|\bhd\b|\b4k\b|\bhq\b|full album|music)[^)\]】]*)[)\]】]/gi;
 
 function cleanTitle(t) {
-  return t.replace(NOISE, '').replace(/\s+\|\s+.*$/, '').replace(/\s{2,}/g, ' ').trim();
+  return t.replace(/\s*\[[A-Za-z0-9_-]{11}\]\s*$/, '').replace(NOISE, '').replace(/\s+\|\s+.*$/, '').replace(/\s{2,}/g, ' ').trim();
 }
 
 function parseTrack(f) {
@@ -367,6 +367,36 @@ async function uploadJob(user, job) {
   return { id: data.id, link: data.webViewLink || `https://drive.google.com/file/d/${data.id}/view` };
 }
 
+/**
+ * Ganti nama file lagu di Drive. Ekstensi dipertahankan; judul tampilan (appProperties.title) ikut diganti
+ * karena judul di Pustaka dibaca dari sana lebih dulu. "Artis - Judul" otomatis dipisah menjadi artis & judul.
+ */
+async function renameFile(user, fileId, input) {
+  if (!isDriveId(fileId)) throw new DriveError('ID file tidak valid.', 400);
+  requireWrite(user);
+  const folderId = requireFolder(user);
+  let name = String(input || '').normalize('NFC').replace(/[\u0000-\u001f\u007f/\\]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  if (!name) throw new DriveError('Nama tidak boleh kosong.', 400);
+  if (name.length > 150) name = name.slice(0, 150).trim();
+  const token = await accessToken(user);
+  const cur = await apiJson(token, `/drive/v3/files/${fileId}?supportsAllDrives=true&fields=id,name,parents,appProperties`);
+  // Hanya file di folder SoundWave milik pengguna ini
+  if (!(cur.parents || []).includes(folderId)) throw new DriveError('File ini tidak ada di folder SoundWave Anda.', 403);
+  const ext = (cur.name.match(/\.[A-Za-z0-9]{2,5}$/) || [''])[0];
+  name = name.replace(new RegExp(`${ext.replace('.', '\\.')}$`, 'i'), '').trim() || name;
+  const fields = 'id,name,mimeType,size,createdTime,appProperties,videoMediaMetadata(durationMillis)';
+  const appProperties = { title: clipBytes(name, 110) };
+  // Bila pengguna menulis "Artis - Judul", artis dari kanal YouTube tidak dipakai lagi
+  if (/\s[-–—]\s/.test(name)) appProperties.channel = null;
+  const f = await apiJson(token, `/drive/v3/files/${fileId}?supportsAllDrives=true&fields=${encodeURIComponent(fields)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: name + ext, appProperties }),
+  });
+  invalidate(user.id);
+  return parseTrack(f);
+}
+
 async function trashFile(user, fileId) {
   if (!isDriveId(fileId)) throw new DriveError('ID file tidak valid.', 400);
   requireWrite(user);
@@ -381,5 +411,5 @@ async function trashFile(user, fileId) {
 
 module.exports = {
   DriveError, FILE_ID_RE, isConfigured, authUrl, handleCallback, disconnect,
-  setFolder, setLinkFolder, clearLink, createFolder, listTracks, stream, uploadJob, trashFile, parseTrack, invalidate,
+  setFolder, setLinkFolder, clearLink, createFolder, listTracks, stream, uploadJob, trashFile, renameFile, parseTrack, invalidate,
 };

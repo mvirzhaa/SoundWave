@@ -8,7 +8,10 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { YTDLP, baseArgs } = require('./ytdlp');
+const { YTDLP, baseArgs, cleanError, friendlyError, isOutdatedError } = require('./ytdlp');
+
+/** Cadangan saat pemecah JS YouTube gagal: varian pemutar lain (saran pengembang yt-dlp). Bisa diganti lewat env. */
+const FALLBACK_ARGS = (process.env.YTDLP_FALLBACK_EXTRACTOR_ARGS ?? 'youtube:player_js_variant=main').trim();
 
 const DOWNLOAD_DIR = process.env.DOWNLOAD_DIR || path.join(os.tmpdir(), 'soundwave');
 const MAX_CONCURRENT = Math.max(1, Number(process.env.MAX_CONCURRENT_JOBS) || 3);
@@ -53,7 +56,7 @@ function createJob({ videoId, format, quality }) {
   }
   const job = {
     id: crypto.randomUUID(),
-    key, videoId, format, quality,
+    key, videoId, format, quality, attempt: 1,
     status: 'queued', stage: 'Menunggu antrean', progress: 0,
     title: null, filename: null, file: null, size: null, error: null, meta: null,
     driveLinks: new Map(), // userId -> link Google Drive
@@ -77,6 +80,7 @@ function pump() {
 function buildArgs(job) {
   const args = [
     ...baseArgs(),
+    ...(job.attempt > 1 && FALLBACK_ARGS ? ['--extractor-args', FALLBACK_ARGS] : []),
     '--no-playlist', '--newline', '--no-part', '--no-mtime',
     '--match-filter', `duration <= ${MAX_DURATION} & !is_live`,
     '--embed-metadata', '--write-info-json', '--no-write-playlist-metafiles',
@@ -165,8 +169,17 @@ function run(job) {
     child.on('close', (code) => {
       clearTimeout(timer);
       if (code !== 0) {
-        const line = stderr.split('\n').reverse().find((l) => l.startsWith('ERROR:')) || '';
-        fail(line.replace(/^ERROR:\s*(\[[^\]]+\]\s*)?/, '').slice(0, 300) || `Konversi gagal (kode ${code}).`);
+        const msg = cleanError(stderr) || `Konversi gagal (kode ${code}).`;
+        console.warn(`[yt-dlp] ${job.videoId} ${job.format} percobaan ${job.attempt}:`, msg);
+        // Pemecah JS YouTube gagal → coba sekali lagi dengan varian pemutar cadangan
+        if (job.attempt === 1 && FALLBACK_ARGS && isOutdatedError(msg)) {
+          job.attempt = 2;
+          job.stage = 'Mencoba cara lain';
+          job.progress = 2;
+          fs.rm(job.dir, { recursive: true, force: true }, () => resolve(run(job)));
+          return;
+        }
+        fail(friendlyError(msg));
         return resolve();
       }
       const want = `.${job.format}`;

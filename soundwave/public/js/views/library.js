@@ -8,7 +8,7 @@ import { isFavRadio, toggleRadioFav } from '../radio.js';
 import { localState, fsaSupported, pickFolder, reconnect, rescan, forgetFolder, setLocalGenre, localById } from '../local.js';
 
 const TABS = [['lagu', 'Lagu'], ['playlist', 'Playlist'], ['artis', 'Artis'], ['genre', 'Genre']];
-const SORTS = { baru: 'Terbaru', judul: 'Judul A–Z', artis: 'Artis A–Z' };
+const SORTS = { baru: 'Terbaru', lama: 'Terlama', judul: 'Judul A–Z', judulza: 'Judul Z–A', artis: 'Artis A–Z' };
 let ui = { tab: 'lagu', filter: '', sort: 'baru', source: 'semua' };
 try { Object.assign(ui, JSON.parse(localStorage.getItem('sw-lib-ui') || '{}'), { filter: '' }); } catch { /* abaikan */ }
 const saveUi = () => { try { localStorage.setItem('sw-lib-ui', JSON.stringify({ tab: ui.tab, sort: ui.sort, source: ui.source })); } catch { /* abaikan */ } };
@@ -62,6 +62,7 @@ export function trackMenu(t, ctx = {}) {
     } },
     !t.quran && t.artist && t.artist !== 'Tidak diketahui' && { label: `Lihat artis: ${t.artist}`, icon: I.user, run: () => { location.hash = '#/artis/' + encodeURIComponent(t.artist); } },
     t.quran && !t.quran.ayat && { label: 'Ulangi / hafalan…', icon: 'M4 6h16M4 10h10M4 14h12M17 17l2 2 3-4', run: () => hafalanMenu(t) },
+    !t.local && !t.quran && !store.user?.drive?.readOnly && { label: 'Ganti nama…', icon: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4', run: () => renameTrack(t, ctx) },
     !t.quran && { label: `Ubah genre${t.genre ? ` (${t.genre})` : ''}`, icon: 'M4 7h16M4 12h10M4 17h6', run: () => editGenre(t, ctx) },
     !t.quran && !sholatState.global?.paksa && { label: 'Jadikan suara adzan', icon: 'M12 3c3 2 5 4.5 5 8H7c0-3.5 2-6 5-8zM5 11h14v10H5z', run: async () => {
       try { await saveSholatPrefs({ sholat: { adzan: { suara: { jenis: 'lagu', id: t.id, title: t.title, local: Boolean(t.local) } } } }); toast(`“${t.title}” dipakai sebagai suara adzan`); } catch (e) { toast(e.message, { type: 'error' }); }
@@ -83,6 +84,19 @@ export function trackMenu(t, ctx = {}) {
       } catch (e) { toast(e.message, { type: 'error' }); }
     } },
   ], null);
+}
+
+async function renameTrack(t, ctx) {
+  const cur = (t.name || t.title || '').replace(/\.[A-Za-z0-9]{2,5}$/, '').replace(/\s*\[[A-Za-z0-9_-]{11}\]\s*$/, '');
+  const v = await promptDialog('Ganti nama lagu', { value: cur, placeholder: 'mis. Natalie Imbruglia - Torn', ok: 'Ganti nama' });
+  if (v == null || !v.trim() || v.trim() === cur) return;
+  try {
+    const { track } = await patch(`/api/library/tracks/${t.id}`, { name: v.trim() });
+    const upd = { name: track.name, title: track.title, artist: track.artist };
+    store.tracks?.forEach((x) => { if (x.id === t.id) Object.assign(x, upd); });
+    Object.assign(t, upd);
+    toast(`Nama diganti menjadi “${track.name}”`); ctx.onChange?.();
+  } catch (e) { toast(e.message, { type: 'error' }); }
 }
 
 async function editGenre(t, ctx) {
@@ -279,6 +293,8 @@ export async function renderLibrary(view, params) {
     if (ui.tab === 'lagu') {
       const list = f ? tracks.filter((t) => norm(`${t.title} ${t.artist} ${t.album || ''} ${t.name}`).includes(f)) : [...tracks];
       if (ui.sort === 'judul') list.sort(byTitle);
+      else if (ui.sort === 'judulza') list.sort((a, b) => byTitle(b, a));
+      else if (ui.sort === 'lama') list.sort((a, b) => addedAt(a) - addedAt(b));
       else if (ui.sort === 'artis') list.sort((a, b) => a.artist.localeCompare(b.artist, 'id') || byTitle(a, b));
       else list.sort((a, b) => addedAt(b) - addedAt(a));
       body.append(h('p.count', { text: `${list.length} lagu` }), trackList(list, { source: ui.source === 'lokal' ? 'Folder lokal' : 'Semua lagu', onChange: draw, showSource: mixed }));

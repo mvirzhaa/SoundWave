@@ -153,3 +153,6 @@ src/
   antrean hanya berisi lagu di HP / yang sudah diunduh; lagu yang belum diunduh memberi pesan, bukan diam.
   Unduhan offline diperiksa (ukuran & isi) — bila yang terunduh ternyata pesan error, file dihapus dan muncul
   pesan "Gagal mengunduh". Unduhan rusak dari versi lama dibersihkan otomatis; unduh ulang lagu tersebut.
+- **Ganti nama & urutan (v10)**: menu ⋮ lagu Drive → **Ganti nama…** (tulis `Artis - Judul`); daftar Lagu di
+  Pustaka bisa diurutkan lewat tombol di atas daftar (Terbaru, Terlama, Judul A–Z / Z–A, Artis A–Z) dan
+  pilihan diingat di HP. Hanya perubahan JS — cukup build ulang APK.

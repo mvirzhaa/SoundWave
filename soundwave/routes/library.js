@@ -63,6 +63,21 @@ r.put('/tracks/:fileId/genre', auth, (req, res) => {
   res.json({ genre: G.setGenre(req.params.fileId, req.body?.genre) });
 });
 
+/** Ganti nama file lagu di Google Drive. Body: { name } */
+r.patch('/tracks/:fileId', auth, wrap(async (req, res) => {
+  const t = await D.renameFile(req.user, req.params.fileId, req.body?.name);
+  const [track] = G.attach([t]);
+  // Perbarui salinan judul di favorit / terakhir diputar / playlist pengguna ini
+  const meta = JSON.stringify(snapshot(track));
+  tx(() => {
+    db.prepare('UPDATE favorites SET meta = ? WHERE user_id = ? AND file_id = ?').run(meta, req.user.id, t.id);
+    db.prepare('UPDATE recent_plays SET meta = ? WHERE user_id = ? AND file_id = ?').run(meta, req.user.id, t.id);
+    db.prepare(`UPDATE playlist_items SET meta = ? WHERE file_id = ? AND playlist_id IN
+      (SELECT id FROM playlists WHERE user_id = ?)`).run(meta, t.id, req.user.id);
+  });
+  res.json({ track });
+}));
+
 r.delete('/tracks/:fileId', auth, wrap(async (req, res) => {
   await D.trashFile(req.user, req.params.fileId);
   const fid = req.params.fileId;

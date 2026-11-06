@@ -9,6 +9,7 @@ const Adzan = require('../lib/adzan');
 const settings = require('../lib/appsettings');
 const Ann = require('../lib/announce');
 const Lyr = require('../lib/lyrics');
+const Y = require('../lib/ytdlp');
 
 const r = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -46,6 +47,20 @@ r.get('/stats', admin, wrap(async (req, res) => {
     lirik: Lyr.admin.stats(),
     adzan: await Adzan.status(),
   });
+}));
+
+/* ---------- yt-dlp (mesin unduh YouTube) ---------- */
+r.get('/ytdlp', admin, wrap(async (req, res) => res.json({ version: await Y.version() })));
+let updating = false;
+r.post('/ytdlp/update', admin, wrap(async (req, res) => {
+  if (updating) return res.status(409).json({ error: 'Pembaruan sedang berjalan.' });
+  updating = true;
+  try {
+    const before = await Y.version();
+    const out = await Y.selfUpdate();
+    const after = await Y.version();
+    res.json({ ok: out.ok, before, after, output: out.output });
+  } finally { updating = false; }
 }));
 
 /* ---------- Pengguna ---------- */

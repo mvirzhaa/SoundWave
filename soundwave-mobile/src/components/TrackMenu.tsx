@@ -138,7 +138,13 @@ export function useTrackMenu() {
           try { await sholat.savePrefs({ sholat: { adzan: { suara: { jenis: 'lagu', id: t.id, title: t.title, local: !!t.local } } } }); ui.toast(T('“{t}” dipakai sebagai suara adzan', { t: t.title })); } catch (e: any) { ui.toast(e.message, true); }
         } },
         !t.quran && !!t.artist && t.artist !== 'Tidak diketahui' && { label: T('Lihat artis: {a}', { a: t.artist }), icon: 'person-outline', onPress: () => router.push({ pathname: '/group/[kind]/[name]', params: { kind: 'artis', name: t.artist } }) },
-        !t.quran && { label: `Ubah genre${t.genre ? ` (${t.genre})` : ''}`, icon: 'pricetag-outline', onPress: async () => {
+        !t.local && !t.quran && !user?.drive.readOnly && { label: T('Ganti nama…'), icon: 'create-outline', onPress: async () => {
+          const cur = (t.name || t.title || '').replace(/\.[A-Za-z0-9]{2,5}$/, '').replace(/\s*\[[A-Za-z0-9_-]{11}\]\s*$/, '');
+          const v = await ui.prompt({ title: T('Ganti nama lagu'), value: cur, placeholder: T('mis. Natalie Imbruglia - Torn'), ok: T('Ganti nama') });
+          if (v == null || !v.trim() || v.trim() === cur) return;
+          try { const r = await lib.renameTrack(t, v.trim()); ui.toast(T('Nama diganti menjadi “{n}”', { n: r.name })); ctx.onChange?.(); } catch (e: any) { ui.toast(e.message, true); }
+        } },
+        !t.quran && { label: `${T('Ubah genre')}${t.genre ? ` (${t.genre})` : ''}`, icon: 'pricetag-outline', onPress: async () => {
           const g = await ui.prompt({ title: T('Genre lagu'), value: t.genre || '', placeholder: T('mis. Pop, Rock, Dangdut, Jazz') });
           if (g == null) return;
           if (t.local) { lib.setLocalGenre(t, g); ui.toast(`Genre: ${g || t.tagGenre || '—'}`); ctx.onChange?.(); return; }

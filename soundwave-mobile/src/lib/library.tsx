@@ -1,8 +1,8 @@
 /** Cache pustaka Google Drive + favorit + penanda perubahan playlist. */
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { del, get, post, put } from './api';
+import { del, get, patch, post, put } from './api';
 import { useAuth } from './auth';
-import { loadOffline, offlineTracks, subscribeOffline } from './offline';
+import { loadOffline, offlineTracks, subscribeOffline, updateOfflineMeta } from './offline';
 import * as Local from './local';
 import type { Track } from './types';
 
@@ -18,6 +18,7 @@ type LibCtx = {
   toggleFavorite: (t: Track) => Promise<boolean>;
   setGenre: (t: Track, genre: string) => Promise<string | null>;
   trashTrack: (t: Track) => Promise<void>;
+  renameTrack: (t: Track, name: string) => Promise<Track>;
   bumpPlaylists: () => void;
   recordPlay: (t: Track) => void;
   // --- musik lokal di HP ---
@@ -139,12 +140,22 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     setPV((v) => v + 1);
   };
 
+  /** Ganti nama file di Google Drive; judul & artis di daftar ikut diperbarui. */
+  const renameTrack = async (t: Track, name: string) => {
+    const r = await patch<{ track: Track }>(`/api/library/tracks/${t.id}`, { name });
+    const upd = { name: r.track.name, title: r.track.title, artist: r.track.artist };
+    setTracks((list) => list?.map((x) => (x.id === t.id ? { ...x, ...upd } : x)) || list);
+    updateOfflineMeta(t.id, upd);
+    setPV((v) => v + 1);
+    return { ...t, ...upd };
+  };
+
   const recordPlay = (t: Track) => { post(`/api/library/recent/${t.id}`, { track: t }).then(() => setPV((v) => v + 1)).catch(() => {}); };
 
   return (
     <Ctx.Provider value={{
       tracks, loading, error, usingOffline, favorites, offlineVersion, playlistsVersion,
-      load, toggleFavorite, setGenre, trashTrack, bumpPlaylists: () => setPV((v) => v + 1), recordPlay,
+      load, toggleFavorite, setGenre, trashTrack, renameTrack, bumpPlaylists: () => setPV((v) => v + 1), recordPlay,
       localTracks, localSettings, localScan, scanLocal, setDeviceScan, addFolder, removeFolder, importLocal, setLocalGenre, removeImported,
     }}>
       {children}

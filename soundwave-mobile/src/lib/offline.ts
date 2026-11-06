@@ -91,6 +91,14 @@ export async function downloadOffline(t: Track) {
   }
 }
 
+/** Perbarui judul/artis unduhan offline setelah lagu diganti namanya. */
+export function updateOfflineMeta(id: string, patch: Partial<Track>) {
+  const e = index[id];
+  if (!e) return;
+  e.track = { ...e.track, ...patch };
+  save();
+}
+
 export function removeOffline(id: string) {
   const e = index[id];
   if (!e) return;

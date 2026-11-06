@@ -676,3 +676,4 @@ body.has-mini .toast { bottom: calc(var(--mini-h) + 24px); }
   .region { grid-template-columns: 1fr; }
   .track .arab { display: none; }
 }
+.ytdlp-out { white-space: pre-wrap; font-size: .78rem; max-height: 220px; overflow: auto; background: var(--bg2, rgba(0,0,0,.25)); padding: 10px; border-radius: 10px; margin-top: 10px; }

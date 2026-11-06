@@ -108,8 +108,35 @@ async function ringkasan(page) {
       h('div.status-line', {}, h(`span.dot.${s.adzan?.tersedia ? 'ok' : 'warn'}`), h('span', { text: s.adzan?.tersedia ? `Umum: ${s.adzan.nama?.umum}` : 'Belum ada suara adzan umum' })),
       h('div.status-line', {}, h(`span.dot.${s.adzan?.subuh ? 'ok' : 'warn'}`), h('span', { text: s.adzan?.subuh ? `Subuh: ${s.adzan.nama?.subuh}` : 'Subuh memakai suara umum' })),
       h('div.status-line', {}, h(`span.dot.${s.adzan?.paksa ? 'ok' : 'warn'}`), h('span', { text: s.adzan?.paksa ? 'Dipakai di semua akun (pilihan pengguna diabaikan)' : 'Bawaan — pengguna boleh memilih suara sendiri' })),
-      h('a.btn', { href: '#adzan', text: 'Atur suara adzan' })));
+      h('a.btn', { href: '#adzan', text: 'Atur suara adzan' })),
+    ytdlpCard());
   } catch (e) { if (page.lastChild) page.lastChild.textContent = e.message; }
+}
+
+/** Mesin unduh YouTube: versi + tombol perbarui. YouTube sering mengubah sistemnya; bila unduhan MP3/MP4
+ *  gagal dengan pesan aneh (mis. "… is not defined"), memperbarui yt-dlp biasanya langsung memperbaikinya. */
+function ytdlpCard() {
+  const ver = h('span', { text: 'Memeriksa versi…' });
+  const dot = h('span.dot.warn');
+  const out = h('pre.ytdlp-out', { hidden: true });
+  const btn = h('button.btn', { type: 'button', text: 'Perbarui yt-dlp' });
+  const show = (v) => { dot.className = `dot ${v ? 'ok' : 'warn'}`; ver.textContent = v ? `Versi terpasang: ${v}` : 'yt-dlp tidak ditemukan di server'; };
+  api('/ytdlp').then((d) => show(d.version)).catch((e) => { ver.textContent = e.message; });
+  btn.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = 'Memperbarui… (bisa 1–2 menit)';
+    try {
+      const d = await api('/ytdlp/update', { method: 'POST' });
+      show(d.after);
+      out.textContent = d.output || '(tidak ada keluaran)'; out.hidden = false;
+      toast(d.before !== d.after ? `yt-dlp diperbarui: ${d.before || '?'} → ${d.after || '?'}` : d.ok ? 'yt-dlp sudah versi terbaru' : 'Pembaruan otomatis gagal — lihat keterangan');
+    } catch (e) { toast(e.message, { type: 'error' }); }
+    btn.disabled = false; btn.textContent = 'Perbarui yt-dlp';
+  });
+  return h('div.panel-card', {},
+    h('h3', { text: 'Mesin unduh YouTube (yt-dlp)' }),
+    h('div.status-line', {}, dot, ver),
+    h('p.muted', { text: 'Bila unduhan MP3/MP4 gagal dengan pesan seperti "… is not defined" atau "Requested format is not available", YouTube baru mengubah sistemnya — perbarui yt-dlp. Tombol ini menjalankan "yt-dlp -U" (untuk yt-dlp versi .exe/binary). Bila dipasang lewat pip: pip install -U "yt-dlp[default]".' }),
+    btn, out);
 }
 
 /* ---------- Pengguna ---------- */

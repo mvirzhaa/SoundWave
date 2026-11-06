@@ -54,7 +54,11 @@ function runJson(args, timeoutMs = 30000) {
     });
     child.on('close', (code) => {
       clearTimeout(timer);
-      if (code !== 0) return reject(new Error(cleanError(err) || `yt-dlp keluar dengan kode ${code}`));
+      if (code !== 0) {
+        const msg = cleanError(err) || `yt-dlp keluar dengan kode ${code}`;
+        console.warn('[yt-dlp]', msg);
+        return reject(new Error(friendlyError(msg)));
+      }
       try { resolve(JSON.parse(out)); } catch { reject(new Error('Output yt-dlp tidak valid')); }
     });
   });
@@ -62,7 +66,50 @@ function runJson(args, timeoutMs = 30000) {
 
 function cleanError(stderr) {
   const line = String(stderr).split('\n').reverse().find((l) => l.startsWith('ERROR:'));
-  return line ? line.replace(/^ERROR:\s*(\[[^\]]+\]\s*)?/, '').slice(0, 300) : '';
+  return line ? line.replace(/^ERROR:\s*(\[[^\]]+\]\s*)*/, '').replace(/^[A-Za-z0-9_-]{11}:\s*/, '').slice(0, 300) : '';
+}
+
+/**
+ * Error yang muncul ketika YouTube mengubah kode pemutarnya dan pemecah "JS challenge" di yt-dlp
+ * belum mengikuti (mis. "apiUrl is not defined", "n challenge", "Requested format is not available").
+ * Solusinya hampir selalu: perbarui yt-dlp.
+ */
+const OUTDATED_RE = /is not defined|is not a function|cannot read propert|challenge|\bjsc\b|nsig|signature|requested format is not available|only images are available|js runtime/i;
+const isOutdatedError = (msg) => OUTDATED_RE.test(String(msg || ''));
+
+function friendlyError(msg) {
+  const m = String(msg || '');
+  if (/sign in to confirm/i.test(m)) return 'YouTube meminta verifikasi "bukan bot" untuk server ini. Admin perlu mengisi YTDLP_COOKIES (lihat README).';
+  if (/private video|video unavailable|has been removed|not available in your country/i.test(m)) return 'Video tidak tersedia (privat, dihapus, atau dibatasi wilayah).';
+  if (isOutdatedError(m)) return `YouTube baru saja mengubah sistemnya, dan yt-dlp di server perlu diperbarui. Admin: buka panel admin → Ringkasan → "Perbarui yt-dlp" (atau jalankan yt-dlp -U). Detail: ${m.slice(0, 160)}`;
+  return m;
+}
+
+/** Versi yt-dlp yang terpasang (null bila tidak ditemukan). */
+function version() {
+  return new Promise((resolve) => {
+    let out = '';
+    let child;
+    try { child = spawn(YTDLP, ['--version'], { windowsHide: true }); } catch { return resolve(null); }
+    const timer = setTimeout(() => { child.kill('SIGKILL'); resolve(null); }, 15000);
+    child.stdout.on('data', (d) => { out += d; });
+    child.on('error', () => { clearTimeout(timer); resolve(null); });
+    child.on('close', (code) => { clearTimeout(timer); resolve(code === 0 ? out.trim().split('\n')[0].slice(0, 40) : null); });
+  });
+}
+
+/** Jalankan "yt-dlp -U" (hanya berhasil untuk yt-dlp versi binary/exe; versi pip memberi petunjuk sendiri). */
+function selfUpdate() {
+  return new Promise((resolve) => {
+    let out = '';
+    let child;
+    try { child = spawn(YTDLP, ['-U', '--no-color'], { windowsHide: true }); } catch (e) { return resolve({ ok: false, output: e.message }); }
+    const timer = setTimeout(() => { child.kill('SIGKILL'); }, 180000);
+    child.stdout.on('data', (d) => { out += d; });
+    child.stderr.on('data', (d) => { out += d; });
+    child.on('error', (e) => { clearTimeout(timer); resolve({ ok: false, output: e.code === 'ENOENT' ? 'yt-dlp tidak ditemukan.' : e.message }); });
+    child.on('close', (code) => { clearTimeout(timer); resolve({ ok: code === 0, output: out.trim().slice(-2000) }); });
+  });
 }
 
 function mapEntry(e) {
@@ -105,4 +152,4 @@ async function suggest(query) {
   return Array.isArray(json[1]) ? json[1].slice(0, 10).map(String) : [];
 }
 
-module.exports = { YTDLP, VIDEO_ID_RE, baseArgs, extractVideoId, search, suggest, runJson };
+module.exports = { YTDLP, VIDEO_ID_RE, baseArgs, extractVideoId, search, suggest, runJson, cleanError, friendlyError, isOutdatedError, version, selfUpdate };

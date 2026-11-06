@@ -141,6 +141,15 @@ jaringan privat ditolak, dan jumlah stream serentak dibatasi `RADIO_MAX_STREAMS`
   memilih lagu/file adzan dari pustakanya sendiri.
 - Teks Al-Qur'an, terjemahan, dan audio murottal dari **equran.id** (API v2), di-cache di server.
 
+## Ganti nama & urutan Pustaka
+
+- Menu ⋮ lagu → **Ganti nama…** mengganti nama file di Google Drive (ekstensi tetap). Tulis `Artis - Judul`
+  agar artis ikut terbaca; judul di favorit, terakhir diputar, dan playlist ikut diperbarui. Tidak tersedia di
+  mode link folder (hanya baca). API: `PATCH /api/library/tracks/:fileId` body `{ "name": "…" }`.
+- Pustaka bisa diurutkan: Terbaru, Terlama, Judul A–Z, Judul Z–A, Artis A–Z (web: menu Urutkan; HP: tombol di
+  atas daftar lagu). Pilihan diingat di perangkat.
+- Akhiran `[ID-YouTube]` dari unduhan lama tidak lagi ditampilkan pada judul.
+
 ## Panel superadmin (`/admin`)
 
 Halaman login **terpisah** dari pengguna biasa: buka `<PUBLIC_URL>/admin`. Akun admin disimpan di tabel
@@ -153,7 +162,7 @@ tersendiri, sehingga akun pengguna biasa tidak bisa masuk ke panel ini, begitu p
   dipakai untuk **reset sandi** admin.
 
 **Fitur panel:**
-- **Ringkasan**: jumlah pengguna (aktif/nonaktif/aktif 7 hari), yang terhubung Drive, jumlah HP penerima push, status suara adzan.
+- **Ringkasan**: jumlah pengguna (aktif/nonaktif/aktif 7 hari), yang terhubung Drive, jumlah HP penerima push, status suara adzan, serta versi **yt-dlp** dengan tombol **Perbarui yt-dlp** (menjalankan `yt-dlp -U`; bila YouTube berubah, unduhan MP3/MP4 bisa gagal sampai yt-dlp diperbarui).
 - **Pengguna**: cari, filter, lalu **aktifkan / nonaktifkan** akun. Akun yang dinonaktifkan langsung keluar dari web &
   aplikasi, tidak bisa masuk lagi, dan tidak menerima push. Data & playlist-nya tetap tersimpan.
 - **Adzan**: unggah suara **adzan umum** dan **adzan Subuh** (MP3/M4A/OGG/WAV, maks. 20 MB), dengar pratinjau, hapus.
@@ -303,7 +312,7 @@ dengan ID tervalidasi; isolasi data antar pengguna diuji (playlist & job Drive p
 | Masalah | Solusi |
 |---|---|
 | `Sign in to confirm you're not a bot` | IP server ditandai YouTube; isi `YTDLP_COOKIES` dengan cookies.txt |
-| Format terbatas / error JS runtime | `yt-dlp -U`; pastikan `YTDLP_JS_RUNTIME=node` |
+| Unduhan gagal: `… is not defined`, `Requested format is not available`, error JS runtime | YouTube mengubah sistemnya → perbarui yt-dlp: panel admin → Ringkasan → **Perbarui yt-dlp** (versi .exe/binary), atau `pip install -U "yt-dlp[default]"`. Server otomatis mencoba sekali lagi dengan `YTDLP_FALLBACK_EXTRACTOR_ARGS`. Bila tetap gagal dengan Node, pasang Deno lalu `YTDLP_JS_RUNTIME=deno` |
 | Hubungkan Drive gagal `redirect_uri_mismatch` | Redirect URI di Google Cloud harus persis `<PUBLIC_URL>/api/drive/callback` |
 | "Akses Google Drive kedaluwarsa" | App OAuth masih *Testing* (token 7 hari) → Hubungkan ulang, atau publish/Internal |
 | Genre kosong | Server perlu akses internet ke itunes.apple.com; atau isi manual |

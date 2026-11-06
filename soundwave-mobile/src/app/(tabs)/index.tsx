@@ -2,11 +2,12 @@
  * Tab Pustaka. Sumber: Semua / Google Drive / HP (penyimpanan lokal).
  * Tab: Lagu / Playlist / Artis / Genre. Mode offline (unduhan Drive), acak semua.
  */
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { T } from '../../lib/i18n';
 import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { get, post } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useLibrary } from '../../lib/library';
@@ -24,6 +25,13 @@ type Tab = 'lagu' | 'playlist' | 'artis' | 'genre';
 type Source = 'semua' | 'drive' | 'hp';
 const TABS: [Tab, string][] = [['lagu', 'Lagu'], ['playlist', 'Playlist'], ['artis', 'Artis'], ['genre', 'Genre']];
 const SOURCES: [Source, string, keyof typeof Ionicons.glyphMap][] = [['semua', 'Semua', 'albums-outline'], ['drive', 'Drive', 'logo-google'], ['hp', 'HP', 'phone-portrait-outline']];
+type Sort = 'baru' | 'lama' | 'az' | 'za' | 'artis';
+const SORTS: [Sort, string, keyof typeof Ionicons.glyphMap][] = [
+  ['baru', 'Terbaru', 'time-outline'], ['lama', 'Terlama', 'hourglass-outline'],
+  ['az', 'Judul A–Z', 'text-outline'], ['za', 'Judul Z–A', 'text-outline'], ['artis', 'Artis A–Z', 'person-outline'],
+];
+const SORT_KEY = 'sw-lib-sort';
+const byTitle = (a: Track, b: Track) => (a.title || '').localeCompare(b.title || '', 'id', { sensitivity: 'base', numeric: true });
 const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
 const addedAt = (t: Track & { createdTime?: string }) => (t.createdTime ? Date.parse(t.createdTime) : t.added || 0);
 
@@ -37,6 +45,9 @@ export default function LibraryScreen() {
   const [src, setSrc] = useState<Source>('semua');
   const [filter, setFilter] = useState('');
   const [offlineOnly, setOfflineOnly] = useState(false);
+  const [sort, setSortState] = useState<Sort>('baru');
+  useEffect(() => { SecureStore.getItemAsync(SORT_KEY).then((v) => { if (v && SORTS.some(([k]) => k === v)) setSortState(v as Sort); }).catch(() => {}); }, []);
+  const setSort = (v: Sort) => { setSortState(v); SecureStore.setItemAsync(SORT_KEY, v).catch(() => {}); };
   const [playlists, setPlaylists] = useState<{ special: PlaylistSummary[]; playlists: PlaylistSummary[] } | null>(null);
   const { width } = useWindowDimensions();
 
@@ -70,8 +81,20 @@ export default function LibraryScreen() {
 
   const list = useMemo(() => {
     const f = norm(filter);
-    return f ? base.filter((t) => norm(`${t.title} ${t.artist} ${t.album || ''} ${t.name}`).includes(f)) : base;
-  }, [base, filter]);
+    const out = f ? base.filter((t) => norm(`${t.title} ${t.artist} ${t.album || ''} ${t.name}`).includes(f)) : [...base];
+    if (sort === 'az') out.sort(byTitle);
+    else if (sort === 'za') out.sort((a, b) => byTitle(b, a));
+    else if (sort === 'artis') out.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'id', { sensitivity: 'base' }) || byTitle(a, b));
+    else if (sort === 'lama') out.sort((a, b) => addedAt(a) - addedAt(b));
+    else out.sort((a, b) => addedAt(b) - addedAt(a));
+    return out;
+  }, [base, filter, sort]);
+
+  const sortMenu = () => ui.sheet({
+    title: T('Urutkan lagu'),
+    items: SORTS.map(([k, label, icon]) => ({ label: `${T(label)}${sort === k ? '  ✓' : ''}`, icon, onPress: () => setSort(k) })),
+  });
+  const sortLabel = T(SORTS.find(([k]) => k === sort)![1]);
 
   const groups = useMemo(() => {
     if (tab !== 'artis' && tab !== 'genre') return [];
@@ -282,7 +305,15 @@ export default function LibraryScreen() {
         data={list}
         keyExtractor={(t) => t.id}
         refreshControl={refresh}
-        ListHeaderComponent={<>{header}{list.length ? <Text style={s.count}>{list.length} lagu</Text> : null}</>}
+        ListHeaderComponent={<>{header}{list.length ? (
+          <View style={s.countRow}>
+            <Text style={s.count}>{list.length} {T('lagu')}</Text>
+            <Pressable onPress={sortMenu} style={s.sortBtn} hitSlop={8} accessibilityLabel={T('Urutkan lagu')}>
+              <Ionicons name="swap-vertical" size={16} color={C.accent} />
+              <Text style={s.sortText}>{sortLabel}</Text>
+            </Pressable>
+          </View>
+        ) : null}</>}
         contentContainerStyle={{ paddingBottom: 100 }}
         initialNumToRender={20}
         windowSize={11}
@@ -327,6 +358,9 @@ const s = themed(() => StyleSheet.create({
   offBtn: { width: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 12, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
   banner: { color: C.warn, fontSize: 13, paddingHorizontal: 16, paddingBottom: 6 },
   count: { color: C.muted, fontSize: 13, paddingHorizontal: 16, paddingVertical: 4 },
+  countRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 14 },
+  sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
+  sortText: { color: C.accent, fontWeight: '700', fontSize: 13 },
   hint: { color: C.muted, fontSize: 13, padding: 16, textAlign: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 14, paddingTop: 8 },
   newPl: { borderRadius: 14, borderWidth: 2, borderStyle: 'dashed', borderColor: C.border, alignItems: 'center', justifyContent: 'center', backgroundColor: C.surface },
