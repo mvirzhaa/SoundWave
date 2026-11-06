@@ -1,6 +1,6 @@
 /** Halaman Cari: pencarian YouTube, pratinjau, konversi MP3/MP4, unduh / simpan ke Drive. */
 import { h, icon, I, fmtDur, fmtSize, debounce, fillBars, toast } from '../ui.js';
-import { get, post, api } from '../api.js';
+import { get, post, api, apiUrl } from '../api.js';
 import { store, emit, on, driveReady, driveWritable, invalidateTracks } from '../store.js';
 
 let config = { mp3: [128, 192, 256, 320], mp4: [360, 480, 720, 1080] };
