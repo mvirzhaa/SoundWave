@@ -49,6 +49,8 @@ type Ctx = {
   offline: boolean;
   playing: Wajib | null;
   notifGranted: boolean | null;
+  /** Admin memaksa semua akun memakai suara adzan global (pilihan lagu pengguna diabaikan). */
+  paksa: boolean;
   reload: () => Promise<void>;
   savePrefs: (patch: DeepPartial<Prefs>) => Promise<Prefs | null>;
   locateNow: () => Promise<void>;
@@ -63,7 +65,8 @@ export const useSholat = () => useContext(SholatCtx);
 /* ---------- Cache di HP ---------- */
 const cacheFile = new File(Paths.document, 'sholat.json');
 const adzanFile = (jenis: 'umum' | 'subuh') => new File(Paths.document, `adzan-${jenis}.mp3`);
-type Cache = { prefs?: Prefs; jadwal?: Jadwal };
+type GlobalAdzan = { tersedia: boolean; subuh: boolean; versi: string | null; paksa: boolean };
+type Cache = { prefs?: Prefs; jadwal?: Jadwal; global?: GlobalAdzan; notifSig?: string };
 function readCache(): Cache {
   try { return cacheFile.exists ? JSON.parse(cacheFile.textSync() || '{}') : {}; } catch { return {}; }
 }
@@ -98,8 +101,19 @@ async function ensureChannel() {
   });
 }
 
+/** Jadwalkan ulang notifikasi hanya bila daftar waktunya berubah (menghindari puluhan panggilan native tiap aplikasi dibuka). */
 async function scheduleNotifications(j: Jadwal | null, p: Prefs | null) {
   try {
+    const a0 = p?.sholat.adzan;
+    const sig = !j || !a0?.aktif ? 'off'
+      : JSON.stringify([j.lokasi, j.tz, upcoming(j, 200).filter((n) => a0.waktu[n.key]).slice(0, MAX_NOTIF).map((n) => n.at), T('Waktu {w} telah tiba', { w: '' })]);
+    const cache = readCache();
+    if (cache.notifSig === sig) {
+      // Sudah terjadwal sama persis; cek cepat jumlahnya masih ada
+      const have = (await Notifications.getAllScheduledNotificationsAsync()).filter((n) => n.identifier.startsWith('adzan-')).length;
+      if (sig === 'off' || have > 0) return have;
+    }
+    writeCache({ ...cache, notifSig: sig });
     const all = await Notifications.getAllScheduledNotificationsAsync();
     await Promise.all(all.filter((n) => n.identifier.startsWith('adzan-')).map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)));
     const a = p?.sholat.adzan;
@@ -144,6 +158,9 @@ export function SholatProvider({ children }: { children: React.ReactNode }) {
   const [banner, setBanner] = useState<{ key: Wajib; jam: string; test: boolean } | null>(null);
   const [notifGranted, setNotifGranted] = useState<boolean | null>(null);
   const [tick, setTick] = useState(0);
+  const [global, setGlobal] = useState<GlobalAdzan | null>(() => readCache().global || null);
+  const globalRef = useRef<GlobalAdzan | null>(global); globalRef.current = global;
+  const lastAdzanCheck = useRef(0);
 
   const prefsRef = useRef<Prefs | null>(null); prefsRef.current = prefs;
   const jadwalRef = useRef<Jadwal | null>(null); jadwalRef.current = jadwal;
@@ -275,7 +292,7 @@ export function SholatProvider({ children }: { children: React.ReactNode }) {
   /* ---- Adzan ---- */
   const adzanSource = async (key: Wajib): Promise<string> => {
     const s = prefsRef.current?.sholat.adzan.suara;
-    if (s?.jenis === 'lagu' && s.id) {
+    if (s?.jenis === 'lagu' && s.id && !globalRef.current?.paksa) {
       if (s.local) {
         const t = libRef.current.localTracks.find((x) => x.id === s.id);
         if (t?.uri) return t.uri;
@@ -288,7 +305,8 @@ export function SholatProvider({ children }: { children: React.ReactNode }) {
     const jenis = key === 'subuh' && adzanFile('subuh').exists ? 'subuh' : 'umum';
     const f = adzanFile(jenis);
     if (f.exists) return f.uri;
-    return `${getServer()}/api/sholat/adzan/${jenis}?t=${encodeURIComponent(await mediaToken())}`;
+    const v = globalRef.current?.versi ? `&v=${encodeURIComponent(globalRef.current.versi)}` : '';
+    return `${getServer()}/api/sholat/adzan/${jenis}?t=${encodeURIComponent(await mediaToken())}${v}`;
   };
 
   const finish = useCallback(() => {
@@ -335,10 +353,18 @@ export function SholatProvider({ children }: { children: React.ReactNode }) {
     else setBanner({ key: n.key, jam: n.jam, test: false });
   }, [playAdzan]);
 
-  // Unduh suara adzan bawaan sekali agar bisa diputar offline
+  // Unduh suara adzan global agar bisa diputar offline; unduh ulang bila admin mengganti file (versi berubah)
   const cacheAdzanFiles = useCallback(async () => {
+    lastAdzanCheck.current = Date.now();
     try {
-      const st = await get<{ tersedia: boolean; subuh: boolean }>('/api/sholat/adzan');
+      const st = await get<GlobalAdzan>('/api/sholat/adzan');
+      const old = readCache().global;
+      setGlobal(st);
+      persist({ global: st });
+      if (old?.versi !== st.versi) {
+        (['umum', 'subuh'] as const).forEach((j) => { try { if (adzanFile(j).exists) adzanFile(j).delete(); } catch { /* abaikan */ } });
+      }
+      if (!st.subuh) { try { if (adzanFile('subuh').exists) adzanFile('subuh').delete(); } catch { /* abaikan */ } }
       const todo: ('umum' | 'subuh')[] = [];
       if (st.tersedia && !adzanFile('umum').exists) todo.push('umum');
       if (st.subuh && !adzanFile('subuh').exists) todo.push('subuh');
@@ -386,9 +412,10 @@ export function SholatProvider({ children }: { children: React.ReactNode }) {
       if (prefsRef.current?.sholat.mode === 'auto' && (!lastFix.current || Date.now() - lastFix.current.at > 5 * 60000)) locate({ interactive: false });
       const j = jadwalRef.current;
       if (!j || !j.jadwal.some((x) => x.date === todayIn(j.tz, 1))) reload();
+      if (Date.now() - lastAdzanCheck.current > 30 * 60000) cacheAdzanFiles();
     });
     return () => sub.remove();
-  }, [user, locate, reload]);
+  }, [user, locate, reload, cacheAdzanFiles]);
 
   // Mode berubah → mulai/berhenti memantau lokasi
   useEffect(() => { if (user) startWatch(); }, [prefs?.sholat.mode, user, startWatch]);
@@ -430,10 +457,11 @@ export function SholatProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => () => { adzanPlayer.current?.remove(); adzanPlayer.current = null; }, []);
 
-  const value: Ctx = {
-    prefs, jadwal, next, error, loading, locating, locError, offline, playing, notifGranted,
+  const paksa = Boolean(global?.paksa);
+  const value: Ctx = useMemo(() => ({
+    prefs, jadwal, next, error, loading, locating, locError, offline, playing, notifGranted, paksa,
     reload, savePrefs, locateNow, setManual, playAdzan, stopAdzan, requestNotif,
-  };
+  }), [prefs, jadwal, next, error, loading, locating, locError, offline, playing, notifGranted, paksa, reload, savePrefs, locateNow, setManual, playAdzan, stopAdzan, requestNotif]);
 
   return (
     <SholatCtx.Provider value={value}>

@@ -112,9 +112,18 @@ let lastRecorded = null;
 let loadSeq = 0;
 let loaded = false; // media sudah punya sumber untuk lagu saat ini
 let failStreak = 0; // cegah loncat tanpa henti bila banyak file tak tersedia
+let radioWatch = null;
 async function load(autoplay = true, startAt = 0) {
   let t = current();
   if (!t) return;
+  clearTimeout(radioWatch);
+  if (t.radio && autoplay) {
+    // Pengawas: stasiun yang tidak bersuara dalam 20 detik dihentikan (tidak menggantung "memuat" terus)
+    const id = t.id;
+    radioWatch = setTimeout(() => {
+      if (current()?.id === id && !(media.currentTime > 0)) { media.pause(); toast(`${t.title}: stasiun tidak merespons. Coba stasiun lain.`, { type: 'error' }); }
+    }, 20000);
+  }
   // Lagu lokal dari antrean/playlist: pakai objek terbaru dari hasil pindai folder
   if (t.local && localById(t.id)) { t = localById(t.id); state.queue[state.index] = t; }
   const seq = ++loadSeq;
@@ -326,6 +335,11 @@ export function initPlayer({ trackMenu }) {
   media.addEventListener('error', () => {
     // Abaikan error dari sumber lama / saat sumber sedang diganti
     if (!current() || !loaded || !media.getAttribute('src')) return;
+    if (current().radio) { // radio: jangan lompat ke stasiun lain sendiri
+      clearTimeout(radioWatch);
+      toast(`${current().title}: stasiun tidak merespons. Coba stasiun lain.`, { type: 'error' });
+      return;
+    }
     if (++failStreak >= Math.min(5, state.queue.length)) { toast('Beberapa lagu gagal diputar. Pemutaran dihentikan.', { type: 'error' }); return; }
     toast(`Gagal memutar “${current().title}”. Melewati…`, { type: 'error' });
     setTimeout(() => next(true), 1200);

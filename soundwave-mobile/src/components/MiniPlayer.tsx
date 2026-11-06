@@ -4,15 +4,16 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Cover } from './Cover';
-import { usePlayer } from '../lib/player';
+import { usePlayer, usePlayerProgress } from '../lib/player';
 import { C, themed } from '../lib/theme';
 
-/** Mini player di atas tab bar (ketuk untuk membuka pemutar penuh). */
+/** Mini player di atas tab bar dan di bawah layar lain (ketuk untuk membuka pemutar penuh, ✕ untuk berhenti). */
 export function MiniPlayer() {
   const p = usePlayer();
+  const prog = usePlayerProgress();
   const t = p.current;
   if (!t) return null;
-  const ratio = !t?.radio && p.duration > 0 ? Math.min(1, p.position / p.duration) : 0;
+  const ratio = !t?.radio && prog.duration > 0 ? Math.min(1, prog.position / prog.duration) : 0;
   return (
     <View style={s.wrap}>
       <View style={s.progress}><View style={[s.fill, { width: `${ratio * 100}%` }]} /></View>
@@ -30,13 +31,16 @@ export function MiniPlayer() {
       <Pressable hitSlop={6} onPress={p.next} style={s.btn} accessibilityLabel={T("Berikutnya")}>
         <Ionicons name="play-skip-forward" size={22} color={C.text} />
       </Pressable>
+      <Pressable hitSlop={6} onPress={p.stop} style={s.btn} accessibilityLabel={T('Hentikan')}>
+        <Ionicons name="close" size={22} color={C.muted} />
+      </Pressable>
     </View>
   );
 }
 
 const s = themed(() => StyleSheet.create({
   wrap: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 8, marginBottom: 6, paddingRight: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 2, marginHorizontal: 8, marginBottom: 6, paddingRight: 8,
     backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, borderColor: C.border, overflow: 'hidden', height: 62,
   },
   progress: { position: 'absolute', left: 0, right: 0, top: 0, height: 2.5 },
@@ -45,5 +49,5 @@ const s = themed(() => StyleSheet.create({
   title: { color: C.text, fontWeight: '700', fontSize: 15 },
   artist: { color: C.muted, fontSize: 13 },
   play: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center' },
-  btn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  btn: { width: 38, height: 40, alignItems: 'center', justifyContent: 'center' },
 }));

@@ -1,6 +1,6 @@
 /** Pengaturan tampilan di HP: tema (sistem/gelap/terang) & bahasa (Indonesia/English). */
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { useColorScheme } from 'react-native';
+import { Appearance, AppState } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { applyTheme, Scheme } from './theme';
 import { applyLang, Lang } from './i18n';
@@ -19,7 +19,20 @@ const SettingsCtx = createContext<Ctx>(null as unknown as Ctx);
 export const useSettings = () => useContext(SettingsCtx);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const system = useColorScheme();
+  // Tema sistem hanya diterapkan saat aplikasi aktif & stabil. iOS/Android bisa melaporkan perubahan tema sesaat
+  // ketika aplikasi masuk latar belakang (snapshot app switcher, mode gelap otomatis malam hari); kalau diikuti,
+  // semua layar dipasang ulang di latar belakang dan bisa kembali sebagai layar gelap kosong.
+  const [system, setSystem] = useState(Appearance.getColorScheme());
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const apply = () => {
+      if (t) clearTimeout(t);
+      t = setTimeout(() => { if (AppState.currentState === 'active') setSystem(Appearance.getColorScheme()); }, 400);
+    };
+    const a = Appearance.addChangeListener(apply);
+    const b = AppState.addEventListener('change', (s2) => { if (s2 === 'active') apply(); });
+    return () => { a.remove(); b.remove(); if (t) clearTimeout(t); };
+  }, []);
   const [st, setSt] = useState<Settings | null>(null);
 
   useEffect(() => {

@@ -67,9 +67,10 @@ const uniq = (list) => {
 
 /** Stasiun populer di negara tertentu (default Indonesia). */
 async function populer(negara = 'ID', limit = 60) {
-  const cc = /^[A-Z]{2}$/i.test(negara) ? negara.toUpperCase() : 'ID';
-  return cached(`radio:top:${cc}:${limit}`, 30 * MIN, async () => {
-    const q = new URLSearchParams({ countrycode: cc, hidebroken: 'true', order: 'clickcount', reverse: 'true', limit: String(limit) });
+  // negara '' = seluruh dunia (stasiun paling banyak diputar dari semua negara)
+  const cc = /^[A-Z]{2}$/i.test(negara || '') ? negara.toUpperCase() : '';
+  return cached(`radio:top:${cc || 'ALL'}:${limit}`, 30 * MIN, async () => {
+    const q = new URLSearchParams({ hidebroken: 'true', order: 'clickcount', reverse: 'true', limit: String(limit), ...(cc ? { countrycode: cc } : {}) });
     return uniq((await getJson(`/json/stations/search?${q}`)).map(mapStation));
   });
 }
@@ -80,7 +81,7 @@ async function populer(negara = 'ID', limit = 60) {
  */
 async function cari(q, negara = 'ID') {
   const text = String(q || '').trim().slice(0, 60);
-  if (!text) return populer(negara || 'ID');
+  if (!text) return populer(negara, negara ? 60 : 100);
   const cc = /^[A-Z]{2}$/i.test(negara || '') ? negara.toUpperCase() : '';
   const freq = frekuensi(` ${text} `) || (/^\d{2,3}([.,]\d)?$/.test(text) ? text.replace(',', '.') : null);
   return cached(`radio:q:${cc}:${text.toLowerCase()}`, 10 * MIN, async () => {

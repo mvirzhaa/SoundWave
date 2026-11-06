@@ -10,6 +10,7 @@ import { renderAccount } from './views/account.js';
 import { renderSholat } from './views/sholat.js';
 import { renderRadio } from './views/radio.js';
 import { loadRadioFav } from './radio.js';
+import { startAnnouncements, stopAnnouncements } from './announce.js';
 import { loadSholat, nextChipText } from './sholat.js';
 import { on as onEvent } from './store.js';
 import { openVoice } from './voice.js';
@@ -89,6 +90,7 @@ function enterApp(user) {
   initLocal().catch(() => {});
   loadSholat();
   loadRadioFav();
+  startAnnouncements();
   loadLocalFavorites();
   route();
 }
@@ -96,6 +98,7 @@ function enterApp(user) {
 async function logout(all) {
   try { await post(all ? '/api/auth/logout-all' : '/api/auth/logout'); } catch { /* abaikan */ }
   resetPlayer();
+  stopAnnouncements();
   store.user = null;
   invalidateTracks();
   showAuth();

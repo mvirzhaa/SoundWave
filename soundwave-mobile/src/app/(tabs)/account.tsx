@@ -12,6 +12,7 @@ import { useSettings, ThemeMode } from '../../lib/settings';
 import { offlineSizeBytes, offlineTracks, removeOffline } from '../../lib/offline';
 import { Button, Chip } from '../../components/Common';
 import { Accordion } from '../../components/Accordion';
+import { unregisterPush, useAnnouncements } from '../../components/Announcements';
 import { C, fmtSize, themed } from '../../lib/theme';
 import { T, Lang } from '../../lib/i18n';
 import type { User } from '../../lib/types';
@@ -21,6 +22,7 @@ export default function AccountScreen() {
   const player = usePlayer();
   const ui = useUi();
   const settings = useSettings();
+  const ann = useAnnouncements();
   const [cur, setCur] = useState('');
   const [nxt, setNxt] = useState('');
   const [busy, setBusy] = useState('');
@@ -51,6 +53,16 @@ export default function AccountScreen() {
           <Text style={[s.muted, { fontSize: 12 }]} numberOfLines={1}>{T('Server')}: {getServer()}</Text>
         </View>
       </View>
+
+      <Pressable style={s.annRow} onPress={() => router.push('/pengumuman')}>
+        <View style={s.annIco}><Ionicons name="megaphone-outline" size={19} color={C.accent} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.annTitle}>{T('Pengumuman')}</Text>
+          <Text style={s.muted}>{ann.unread ? T('{n} belum dibaca', { n: ann.unread }) : T('{n} pengumuman', { n: ann.list.length })}</Text>
+        </View>
+        {ann.unread ? <View style={s.annBadge}><Text style={s.annBadgeText}>{ann.unread}</Text></View> : null}
+        <Ionicons name="chevron-forward" size={18} color={C.muted} />
+      </Pressable>
 
       <Accordion id="tampilan" icon="color-palette-outline" title={T('Tampilan & bahasa')}
         summary={`${themeLabel[settings.theme]} · ${settings.lang === 'en' ? 'English' : 'Bahasa Indonesia'}`}>
@@ -97,13 +109,13 @@ export default function AccountScreen() {
             await post('/api/auth/password', { current: cur, next: nxt });
             setCur(''); setNxt('');
             ui.toast(T('Kata sandi diganti. Silakan masuk lagi.'));
-            player.stop(); await logout();
+            player.stop(); await unregisterPush(); await logout();
           })} />
       </Accordion>
 
-      <Button label={T('Keluar')} kind="ghost" icon="log-out-outline" onPress={async () => { player.stop(); await logout(); }} />
+      <Button label={T('Keluar')} kind="ghost" icon="log-out-outline" onPress={async () => { player.stop(); await unregisterPush(); await logout(); }} />
       <Text style={[s.link, { color: C.danger, textAlign: 'center', marginTop: 4 }]}
-        onPress={async () => { player.stop(); await logout(true); }}>{T('Keluar dari semua perangkat')}</Text>
+        onPress={async () => { player.stop(); await unregisterPush(); await logout(true); }}>{T('Keluar dari semua perangkat')}</Text>
     </ScrollView>
   );
 }
@@ -244,5 +256,10 @@ const s = themed(() => StyleSheet.create({
   modeOn: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   modeTitle: { color: C.muted, fontWeight: '800' },
   modeSub: { color: C.muted, fontSize: 12, marginTop: 2 },
+  annRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.surface, borderRadius: 16, borderWidth: 1, borderColor: C.border, padding: 14 },
+  annIco: { width: 36, height: 36, borderRadius: 10, backgroundColor: C.surface2, alignItems: 'center', justifyContent: 'center' },
+  annTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
+  annBadge: { minWidth: 22, height: 22, borderRadius: 11, backgroundColor: C.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  annBadgeText: { color: '#fff', fontWeight: '800', fontSize: 12 },
   modeDot: { position: 'absolute', top: 8, right: 10, width: 8, height: 8, borderRadius: 4, backgroundColor: C.ok },
 }));

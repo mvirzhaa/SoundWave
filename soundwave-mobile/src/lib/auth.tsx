@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import * as SecureStore from 'expo-secure-store';
 import { get, loadSession, post, setServer, setToken, setUnauthorizedHandler, hasToken } from './api';
 import type { User } from './types';
 
@@ -9,7 +10,7 @@ type AuthCtx = {
   login: (server: string, email: string, password: string) => Promise<void>;
   register: (server: string, name: string, email: string, password: string) => Promise<void>;
   logout: (all?: boolean) => Promise<void>;
-  refreshUser: () => Promise<User | null>;
+  refreshUser: (timeout?: number) => Promise<User | null>;
 };
 
 const Ctx = createContext<AuthCtx>(null as unknown as AuthCtx);
@@ -17,32 +18,45 @@ export const useAuth = () => useContext(Ctx);
 
 type AuthResponse = { user: User; token: string; mediaToken: string };
 
+// Data akun terakhir disimpan di HP: aplikasi tetap bisa dibuka (lagu HP/offline, jadwal sholat) tanpa internet
+const KEY_USER = 'sw-user';
+const saveUser = (u: User | null) => (u ? SecureStore.setItemAsync(KEY_USER, JSON.stringify(u)) : SecureStore.deleteItemAsync(KEY_USER)).catch(() => {});
+async function cachedUser(): Promise<User | null> {
+  try { const v = await SecureStore.getItemAsync(KEY_USER); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [user, setUserState] = useState<User | null>(null);
 
-  const refreshUser = useCallback(async () => {
+  const refreshUser = useCallback(async (timeout?: number) => {
     try {
-      const r = await get<{ user: User }>('/api/auth/me');
+      const r = await get<{ user: User }>('/api/auth/me', { timeout });
       setUserState(r.user);
+      saveUser(r.user);
       return r.user;
-    } catch {
+    } catch (e: any) {
+      // Server tidak terjangkau (status 0) → pakai data akun terakhir; sesi ditolak → keluar (ditangani onUnauthorized)
+      if (e?.status === 0) { const u = await cachedUser(); if (u) setUserState(u); return u; }
       return null;
     }
   }, []);
 
   useEffect(() => {
-    setUnauthorizedHandler(() => { setToken(null); setUserState(null); });
+    setUnauthorizedHandler(() => { setToken(null); setUserState(null); saveUser(null); });
     (async () => {
-      await loadSession();
-      if (hasToken()) await refreshUser();
-      setReady(true);
+      try {
+        await loadSession();
+        // Maks. 8 detik: jaringan lambat tidak membuat aplikasi tertahan di logo
+        if (hasToken()) await refreshUser(8000);
+      } finally { setReady(true); }
     })();
   }, [refreshUser]);
 
   const finish = async (r: AuthResponse) => {
     await setToken(r.token, r.mediaToken);
     setUserState(r.user);
+    saveUser(r.user);
   };
 
   const login = async (server: string, email: string, password: string) => {
@@ -57,10 +71,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try { if (all) await post('/api/auth/logout-all'); } catch { /* abaikan */ }
     await setToken(null);
     setUserState(null);
+    saveUser(null);
   };
 
   return (
-    <Ctx.Provider value={{ ready, user, setUser: setUserState, login, register, logout, refreshUser }}>
+    <Ctx.Provider value={{ ready, user, setUser: (u: User) => { setUserState(u); saveUser(u); }, login, register, logout, refreshUser }}>
       {children}
     </Ctx.Provider>
   );

@@ -134,7 +134,7 @@ export function useTrackMenu() {
           } },
         t.quran && { label: T('Baca teks surat'), icon: 'book-outline', onPress: () => router.push(`/surat/${t.quran!.surat}?qari=${t.id.split('-')[1]}`) },
         t.quran && !t.quran.ayat && { label: T('Ulangi / hafalan…'), icon: 'school-outline', onPress: () => hafalan(t) },
-        !t.quran && { label: T('Jadikan suara adzan'), icon: 'moon-outline', onPress: async () => {
+        !t.quran && !sholat.paksa && { label: T('Jadikan suara adzan'), icon: 'moon-outline', onPress: async () => {
           try { await sholat.savePrefs({ sholat: { adzan: { suara: { jenis: 'lagu', id: t.id, title: t.title, local: !!t.local } } } }); ui.toast(T('“{t}” dipakai sebagai suara adzan', { t: t.title })); } catch (e: any) { ui.toast(e.message, true); }
         } },
         !t.quran && !!t.artist && t.artist !== 'Tidak diketahui' && { label: T('Lihat artis: {a}', { a: t.artist }), icon: 'person-outline', onPress: () => router.push({ pathname: '/group/[kind]/[name]', params: { kind: 'artis', name: t.artist } }) },

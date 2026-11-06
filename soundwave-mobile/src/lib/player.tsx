@@ -4,11 +4,13 @@
  * dan tombol next/previous di layar kunci / notifikasi berfungsi.
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { AudioPlaylist, AudioSource, createAudioPlaylist, setAudioModeAsync } from 'expo-audio';
 import { getServer, mediaToken, ytThumb } from './api';
 import { offlineUri } from './offline';
 import { useLibrary } from './library';
 import type { Track } from './types';
+import { T } from './i18n';
 
 type Repeat = 'off' | 'all' | 'one';
 
@@ -18,8 +20,6 @@ type PlayerCtx = {
   current: Track | null;
   playing: boolean;
   buffering: boolean;
-  position: number;
-  duration: number;
   shuffle: boolean;
   repeat: Repeat;
   source: string;
@@ -38,10 +38,17 @@ type PlayerCtx = {
   cycleRepeat: () => Repeat;
   setRepeatMode: (m: Repeat) => void;
   stop: () => void;
+  /** Pesan singkat dari pemutar (mis. stasiun radio tidak merespons) — ditampilkan sebagai toast. */
+  notice: { id: number; text: string } | null;
 };
+/** Posisi & durasi dipisah dari status utama: berubah 2×/detik, hanya pemutar/lirik/mini player yang perlu. */
+type ProgressCtx = { position: number; duration: number };
 
 const Ctx = createContext<PlayerCtx>(null as unknown as PlayerCtx);
+const ProgCtx = createContext<ProgressCtx>({ position: 0, duration: 0 });
 export const usePlayer = () => useContext(Ctx);
+export const usePlayerProgress = () => useContext(ProgCtx);
+const RADIO_TIMEOUT = 20000;
 
 const shuffled = <T,>(a: T[]) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
 const LOOP: Record<Repeat, 'none' | 'all' | 'single'> = { off: 'none', all: 'all', one: 'single' };
@@ -60,6 +67,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const indexRef = useRef(-1);
   const lastRecorded = useRef<string | null>(null);
   const lockActive = useRef(false);
+  // Radio: antrean native hanya berisi 1 stasiun (berpindah stasiun jadi instan); daftar stasiun disimpan di sini
+  const radioList = useRef<Track[]>([]);
+  const radioWatch = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [notice, setNotice] = useState<{ id: number; text: string } | null>(null);
+  const say = (text: string) => setNotice({ id: Date.now(), text });
 
   const [queue, setQueue] = useState<Track[]>([]);
   const [index, setIndex] = useState(-1);
@@ -96,6 +108,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const p = createAudioPlaylist({ sources: [], updateInterval: 500, loop: 'none' });
     pl.current = p;
     const s1 = p.addListener('playlistStatusUpdate', (st) => {
+      if (AppState.currentState !== 'active') { // latar belakang: cukup lacak lagu aktif (layar kunci)
+        if (st.currentIndex !== indexRef.current && st.currentIndex >= 0) onTrack(st.currentIndex);
+        return;
+      }
       setPlaying(st.playing);
       setBuffering(st.isBuffering);
       setPosition(st.currentTime || 0);
@@ -104,9 +120,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     });
     const s2 = p.addListener('trackChanged', ({ currentIndex }) => onTrack(currentIndex));
     // Pengaman: baca status langsung dari pemutar tiap 500 ms (waktu, ikon play/pause, lirik tetap bergerak
-    // walaupun event status dari sistem terlambat/tidak terkirim di sebagian HP Android)
+    // walaupun event status dari sistem terlambat/tidak terkirim di sebagian HP Android).
+    // Hanya saat aplikasi aktif di layar — di latar belakang tidak ada yang perlu digambar.
     const last = { t: -1, d: -1, pl: false, b: false };
-    const poll = setInterval(() => {
+    let poll: ReturnType<typeof setInterval> | null = null;
+    const tick = () => {
       try {
         const t = Math.round((p.currentTime || 0) * 4) / 4;
         const d = p.duration || 0;
@@ -119,10 +137,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         const ci = p.currentIndex;
         if (ci >= 0 && ci !== indexRef.current && ci < queueRef.current.length) onTrack(ci);
       } catch { /* pemutar sedang dilepas */ }
-    }, 500);
+    };
+    const startPoll = () => { if (!poll) poll = setInterval(tick, 500); };
+    const stopPoll = () => { if (poll) { clearInterval(poll); poll = null; } };
+    if (AppState.currentState === 'active') startPoll();
+    const s3 = AppState.addEventListener('change', (st) => { if (st === 'active') { tick(); startPoll(); } else stopPoll(); });
     return () => {
-      clearInterval(poll);
-      s1.remove(); s2.remove();
+      stopPoll();
+      s1.remove(); s2.remove(); s3.remove();
+      if (radioWatch.current) clearTimeout(radioWatch.current);
       // Hentikan suara dulu sebelum dilepas, agar tidak ada audio "yatim" yang terus berbunyi
       try { p.pause(); p.clear(); p.clearLockScreenControls(); } catch { /* abaikan */ }
       p.destroy();
@@ -137,6 +160,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const wanted = start == null ? null : tracks[start];
     const list = tracks.filter((t) => t && t.available !== false && (!t.local || t.uri));
     if (!list.length) return;
+    if (list.every((t) => t.radio)) return playRadio(list, wanted ? Math.max(0, list.indexOf(wanted)) : 0, opts.source);
+    radioList.current = [];
+    if (radioWatch.current) { clearTimeout(radioWatch.current); radioWatch.current = null; }
     const seq = ++playSeq.current;
     // Token hanya perlu untuk streaming dari server; lagu di HP / offline / murottal langsung diputar tanpa menunggu
     const needsToken = list.some((t) => !(t.local && t.uri) && !offlineUri(t.id) && !(t.url && /^(quran|radio)-/.test(t.id)));
@@ -167,15 +193,61 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     onTrack(begin);
   };
 
+  /** Radio: ganti stasiun tanpa membangun ulang antrean panjang; pengawas 20 detik untuk stasiun yang mati. */
+  function playRadio(list: Track[], i: number, src?: string) {
+    const p = pl.current;
+    if (!p) return;
+    const seq = ++playSeq.current;
+    radioList.current = list;
+    const t = list[i];
+    setShuffleState(false);
+    setSource(src || 'Radio');
+    commitQueue([t]);
+    p.pause();
+    p.clear();
+    p.add(sourceFor(t));
+    p.loop = 'none';
+    setRepeat('off');
+    p.skipTo(0);
+    p.play();
+    setPlaying(true);
+    setBuffering(true);
+    setPosition(0); setDuration(0);
+    p.setActiveForLockScreen(true, meta(t), { showNextTrack: false, showPreviousTrack: false });
+    lockActive.current = true;
+    onTrack(0);
+    if (radioWatch.current) clearTimeout(radioWatch.current);
+    radioWatch.current = setTimeout(() => {
+      radioWatch.current = null;
+      if (seq !== playSeq.current) return;
+      const cur = pl.current;
+      // Masih belum bersuara → hentikan agar tidak menggantung, beri tahu pengguna
+      if (cur && (cur.isBuffering || !cur.currentTime)) {
+        cur.pause();
+        setPlaying(false); setBuffering(false);
+        say(T('{s}: stasiun tidak merespons. Coba stasiun lain.', { s: t.title }));
+      }
+    }, RADIO_TIMEOUT);
+  }
+  const radioStep = (d: number) => {
+    const list = radioList.current;
+    const cur = queueRef.current[0];
+    if (!list.length || !cur) return false;
+    const i = list.findIndex((x) => x.id === cur.id);
+    playRadio(list, (i + d + list.length) % list.length, source);
+    return true;
+  };
+
   const toggle = () => {
     const p = pl.current;
     if (!p || !queueRef.current.length) return;
     if (p.playing) { p.pause(); setPlaying(false); } else { p.play(); setPlaying(true); }
   };
   const pause = () => { pl.current?.pause(); setPlaying(false); };
-  const resume = () => { if (queueRef.current.length) pl.current?.play(); };
-  const next = () => pl.current?.next();
+  const resume = () => { if (queueRef.current.length) { pl.current?.play(); setPlaying(true); } };
+  const next = () => { if (radioStep(1)) return; pl.current?.next(); };
   const prev = () => {
+    if (radioStep(-1)) return;
     const p = pl.current; if (!p) return;
     if (p.currentTime > 3 || indexRef.current === 0) p.seekTo(0); else p.previous();
   };
@@ -233,9 +305,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const p = pl.current;
     if (!p) return;
     playSeq.current++;
+    radioList.current = [];
+    if (radioWatch.current) { clearTimeout(radioWatch.current); radioWatch.current = null; }
     p.pause();
     p.clear();
     setPlaying(false);
+    setBuffering(false);
+    setPosition(0); setDuration(0);
     if (lockActive.current) { p.clearLockScreenControls(); lockActive.current = false; }
     commitQueue([]);
     indexRef.current = -1;
@@ -244,9 +320,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const current = queue[index] || null;
   const value = useMemo(() => ({
-    queue, index, current, playing, buffering, position, duration, shuffle, repeat, source,
+    queue, index, current, playing, buffering, shuffle, repeat, source, notice,
     playList, toggle, pause, resume, next, prev, seek, jumpTo, removeAt, playNext, addToQueue, setShuffle, cycleRepeat, setRepeatMode, stop,
-  }), [queue, index, current, playing, buffering, position, duration, shuffle, repeat, source]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [queue, index, current, playing, buffering, shuffle, repeat, source, notice]); // eslint-disable-line react-hooks/exhaustive-deps
+  const progress = useMemo(() => ({ position, duration }), [position, duration]);
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={value}><ProgCtx.Provider value={progress}>{children}</ProgCtx.Provider></Ctx.Provider>;
 }

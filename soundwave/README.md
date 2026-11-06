@@ -125,6 +125,39 @@ jaringan privat ditolak, dan jumlah stream serentak dibatasi `RADIO_MAX_STREAMS`
   memilih lagu/file adzan dari pustakanya sendiri.
 - Teks Al-Qur'an, terjemahan, dan audio murottal dari **equran.id** (API v2), di-cache di server.
 
+## Panel superadmin (`/admin`)
+
+Halaman login **terpisah** dari pengguna biasa: buka `<PUBLIC_URL>/admin`. Akun admin disimpan di tabel
+tersendiri, sehingga akun pengguna biasa tidak bisa masuk ke panel ini, begitu pula sebaliknya.
+
+**Membuat akun superadmin** (pilih salah satu):
+- Isi `SUPERADMIN_EMAIL` dan `SUPERADMIN_PASSWORD` (min. 10 karakter) di `.env`, lalu restart server. Akun dibuat sekali
+  saat start; mengubah `.env` sesudahnya tidak menimpa sandi yang sudah diganti di panel.
+- Atau jalankan: `npm run admin -- admin@kampus.ac.id "kata-sandi-panjang" "Nama Admin"`. Perintah yang sama juga
+  dipakai untuk **reset sandi** admin.
+
+**Fitur panel:**
+- **Ringkasan**: jumlah pengguna (aktif/nonaktif/aktif 7 hari), yang terhubung Drive, jumlah HP penerima push, status suara adzan.
+- **Pengguna**: cari, filter, lalu **aktifkan / nonaktifkan** akun. Akun yang dinonaktifkan langsung keluar dari web &
+  aplikasi, tidak bisa masuk lagi, dan tidak menerima push. Data & playlist-nya tetap tersimpan.
+- **Adzan**: unggah suara **adzan umum** dan **adzan Subuh** (MP3/M4A/OGG/WAV, maks. 20 MB), dengar pratinjau, hapus.
+  Saklar **"Pakai di semua akun"** memaksa semua pengguna web & mobile memakai suara ini, sehingga pilihan lagu
+  pribadi diabaikan. Aplikasi mobile mengunduh ulang suara adzan otomatis setiap kali file diganti.
+- **Pengumuman**: tulis judul, isi, dan tautan opsional, tandai "penting", lalu kirim. Pengumuman tersimpan, tampil sebagai
+  **pop-up** di aplikasi mobile & web saat dibuka (sekali per pengguna), bisa dibaca ulang di menu **Pengumuman**,
+  dan dikirim sebagai **push notification** ke HP. Riwayat menampilkan jumlah yang sudah membaca & hasil push.
+- Sesi admin: cookie `sw_admin` (8 jam, `SameSite=Strict`, path `/api/admin`), login dibatasi 10 percobaan / 15 menit.
+
+### Push notification ke HP
+
+Push dikirim lewat **Expo Push Service**. Supaya aplikasi mendapat token push:
+1. Di folder `soundwave-mobile`: `npx eas-cli@latest init`. Perintah ini menulis `extra.eas.projectId` ke `app.json`.
+2. Android: unggah kredensial **FCM v1** (file service account Firebase) lewat `npx eas-cli@latest credentials`.
+   iOS: kredensial APNs dibuat otomatis oleh EAS saat build.
+3. Build ulang aplikasi. Setelah pengguna mengizinkan notifikasi, token terdaftar otomatis ke server.
+
+Tanpa langkah ini, pengumuman tetap muncul sebagai pop-up saat aplikasi dibuka, hanya push-nya yang tidak terkirim.
+
 ## Menjalankan di Windows
 
 1. Pasang Node.js **22.13+** (LTS terbaru disarankan), yt-dlp, dan ffmpeg:
@@ -216,6 +249,9 @@ POST/PUT/PATCH/DELETE) atau `Authorization: Bearer <token>` (mobile). Streaming/
 | POST | `/api/voice` `{text}` | perintah suara |
 | GET | `/api/lyrics?title=&artist=&duration=&ytId=` | lirik tersinkron (LRCLIB → subtitle YouTube) |
 | PUT / DELETE | `/api/drive/link` `{folder}` | mode link folder (tanpa login Google, hanya baca) |
+| GET · POST | `/api/pengumuman` · `/api/pengumuman/dibaca` `{ids}` | pengumuman pengguna · tandai dibaca |
+| POST / DELETE | `/api/pengumuman/push-token` `{token, platform}` | daftarkan / lepas token push HP |
+| * | `/api/admin/...` | panel superadmin (login, stats, users, adzan, pengumuman) — cookie admin terpisah |
 | GET | `/api/radio?q=101.1&negara=ID` | cari stasiun (q kosong = populer; negara kosong = semua) |
 | GET · PUT · DELETE | `/api/radio/favorit` · `/favorit/:uuid` | favorit radio |
 | GET | `/api/radio/stream/:uuid` | proxy stream http (media token boleh) |

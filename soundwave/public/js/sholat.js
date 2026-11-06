@@ -15,7 +15,7 @@ export const WAKTU = [
 export const WAJIB = ['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya'];
 export const namaWaktu = Object.fromEntries(WAKTU);
 
-export const sholat = { prefs: null, jadwal: null, error: null, next: null, playing: null };
+export const sholat = { prefs: null, jadwal: null, error: null, next: null, playing: null, global: null };
 let timer = null;
 let tickTimer = null;
 const adzanAudio = new Audio();
@@ -60,6 +60,8 @@ function hitungNext() {
 export async function loadSholat() {
   try {
     sholat.prefs = await get('/api/sholat/pengaturan');
+    // Suara adzan global dari superadmin (versi & apakah dipaksa untuk semua akun)
+    sholat.global = await get('/api/sholat/adzan').catch(() => null);
     await loadJadwal();
   } catch (e) { sholat.error = e.message; }
   schedule();
@@ -122,11 +124,12 @@ function masukWaktu({ key, jam }) {
 /** URL suara adzan sesuai pengaturan. */
 async function adzanUrl(key) {
   const s = sholat.prefs?.sholat?.adzan?.suara;
-  if (s?.jenis === 'lagu' && s.id) {
+  if (s?.jenis === 'lagu' && s.id && !sholat.global?.paksa) {
     if (s.local) return URL.createObjectURL(await getLocalFile(s.id));
     return apiUrl(`/api/library/stream/${encodeURIComponent(s.id)}`);
   }
-  return apiUrl(`/api/sholat/adzan/${key === 'subuh' ? 'subuh' : 'umum'}`);
+  const v = sholat.global?.versi ? `?v=${encodeURIComponent(sholat.global.versi)}` : '';
+  return apiUrl(`/api/sholat/adzan/${key === 'subuh' ? 'subuh' : 'umum'}${v}`);
 }
 
 let resumeAfter = false;

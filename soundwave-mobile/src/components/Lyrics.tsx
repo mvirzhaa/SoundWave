@@ -5,7 +5,7 @@ import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, V
 import { Ionicons } from '@expo/vector-icons';
 import { File, Paths } from 'expo-file-system';
 import { get } from '../lib/api';
-import { usePlayer } from '../lib/player';
+import { usePlayer, usePlayerProgress } from '../lib/player';
 import { C, themed } from '../lib/theme';
 import type { Track } from '../lib/types';
 
@@ -84,6 +84,7 @@ function QuranText({ track }: { track: Track }) {
 
 function SongLyrics({ track }: { track: Track }) {
   const p = usePlayer();
+  const prog = usePlayerProgress();
   const [data, setData] = useState<LyricsData | null>(null);
   const [err, setErr] = useState('');
   const [offset, setOffset] = useState(() => loadOffsets()[track.id] || 0);
@@ -94,7 +95,7 @@ function SongLyrics({ track }: { track: Track }) {
   const load = async (refresh = false) => {
     const seq = ++reqSeq.current;
     setData(null); setErr('');
-    const dur = p.duration > 0 ? p.duration : track.duration;
+    const dur = prog.duration > 0 ? prog.duration : track.duration;
     const q = new URLSearchParams({ title: track.title, artist: track.artist || '' });
     if (track.album) q.set('album', track.album);
     if (dur) q.set('duration', String(Math.round(dur)));
@@ -111,17 +112,17 @@ function SongLyrics({ track }: { track: Track }) {
   // Muat ulang saat lagu berganti; tunggu sebentar agar durasi asli file terbaca
   useEffect(() => {
     setOffset(loadOffsets()[track.id] || 0);
-    const t = setTimeout(() => load(), p.duration > 0 ? 0 : 800);
+    const t = setTimeout(() => load(), prog.duration > 0 ? 0 : 800);
     return () => clearTimeout(t);
   }, [track.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lines = useMemo(() => (data?.synced ? data.lines || [] : []), [data]);
   const active = useMemo(() => {
-    const now = p.position + offset;
+    const now = prog.position + offset;
     let i = -1; let lo = 0; let hi = lines.length - 1;
     while (lo <= hi) { const mid = (lo + hi) >> 1; if (lines[mid].t <= now) { i = mid; lo = mid + 1; } else hi = mid - 1; }
     return i;
-  }, [p.position, offset, lines]);
+  }, [prog.position, offset, lines]);
 
   useEffect(() => {
     if (active < 0 || Date.now() - userScrollAt.current < 3500) return;

@@ -1,6 +1,7 @@
 /** Halaman Akun: profil, koneksi Google Drive & folder penyimpanan, kata sandi, keluar. */
 import { h, icon, I, toast, confirmDialog } from '../ui.js';
 import { post, put, patch, del } from '../api.js';
+import { ann, markRead } from '../announce.js';
 import { store, setUser, invalidateTracks } from '../store.js';
 
 export function renderAccount(view, params, { logout }) {
@@ -36,6 +37,23 @@ export function renderAccount(view, params, { logout }) {
     /* Kata sandi */
     const cur = h('input', { type: 'password', autocomplete: 'current-password', required: true });
     const nxt = h('input', { type: 'password', autocomplete: 'new-password', minlength: 8, required: true });
+    /* Pengumuman dari admin (tersimpan) */
+    const annBody = h('div.ann-list');
+    const drawAnn = () => {
+      annBody.textContent = '';
+      if (!ann.list.length) { annBody.append(h('p.muted', { text: 'Belum ada pengumuman.' })); return; }
+      ann.list.forEach((a) => annBody.append(h(`div.panel-card.ann${a.level === 'penting' ? '.penting' : ''}`, {},
+        h('div.ann-head', {}, h('b', { text: a.title }), a.level === 'penting' ? h('span.badge-penting', { text: 'Penting' }) : null, a.read ? null : h('span.dot.ok', { title: 'Baru' })),
+        h('p', { text: a.body }),
+        a.link ? h('a', { href: a.link, target: '_blank', rel: 'noopener', text: a.link }) : null,
+        h('small.muted', { text: new Date(a.createdAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) }))));
+      const unread = ann.list.filter((x) => !x.read).map((x) => x.id);
+      if (unread.length) markRead(unread);
+    };
+    page.append(section('pengumuman', icon('M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1zM15 9a4 4 0 0 1 0 6'), 'Pengumuman',
+      ann.unread ? `${ann.unread} belum dibaca` : `${ann.list.length} pengumuman`, annBody));
+    drawAnn();
+
     page.append(section('sandi', icon('M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4'), 'Ganti kata sandi', 'Perangkat lain otomatis keluar', h('div', {},
       h('form.grid-form', { onsubmit: async (e) => {
         e.preventDefault();

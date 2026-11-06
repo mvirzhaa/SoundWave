@@ -5,7 +5,7 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, useWind
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { usePlayer } from '../lib/player';
+import { usePlayer, usePlayerProgress } from '../lib/player';
 import { useLibrary } from '../lib/library';
 import { useUi } from '../lib/ui';
 import { useTrackMenu } from '../components/TrackMenu';
@@ -18,6 +18,7 @@ import { isFavRadio, toggleRadioFav, useRadioFav } from '../lib/radio';
 
 export default function PlayerScreen() {
   const p = usePlayer();
+  const prog = usePlayerProgress();
   const lib = useLibrary();
   const ui = useUi();
   const menu = useTrackMenu();
@@ -94,11 +95,11 @@ export default function PlayerScreen() {
 
       <View style={{ paddingHorizontal: 24 }}>
         {t.radio ? (
-          <View style={s.live}><View style={s.liveDot} /><Text style={s.liveText}>{T('LIVE')}</Text><Text style={s.time}>{fmtDur(p.position)}</Text></View>
+          <View style={s.live}><View style={s.liveDot} /><Text style={s.liveText}>{T('LIVE')}</Text><Text style={s.time}>{fmtDur(prog.position)}</Text></View>
         ) : (
           <>
-            <SeekBar value={p.position} max={p.duration || t.duration || 0} onSeek={p.seek} />
-            <View style={s.times}><Text style={s.time}>{fmtDur(p.position)}</Text><Text style={s.time}>{fmtDur(p.duration || t.duration || 0)}</Text></View>
+            <SeekBar value={prog.position} max={prog.duration || t.duration || 0} onSeek={p.seek} />
+            <View style={s.times}><Text style={s.time}>{fmtDur(prog.position)}</Text><Text style={s.time}>{fmtDur(prog.duration || t.duration || 0)}</Text></View>
           </>
         )}
       </View>

@@ -134,3 +134,16 @@ src/
   `src/lib/i18n-en.ts`. Teks yang belum ada di kamus tampil dalam bahasa Indonesia.
 - Versi ini menambah modul native (`expo-splash-screen`, `expo-location`, `expo-notifications`): jalankan
   `npm install` lalu **build ulang** aplikasi (bukan sekadar reload).
+- **Pengumuman & push**: pengumuman dari panel admin tampil sebagai pop-up saat aplikasi dibuka, tersimpan di
+  **Akun → Pengumuman**, dan dikirim sebagai push notification bila proyek EAS sudah disiapkan
+  (`npx eas-cli@latest init` + kredensial FCM v1 untuk Android; lihat README server). Tanpa itu pop-up tetap jalan.
+- **Mini player di semua layar**: layar Hapalan Quran, Baca surat, playlist, artis/genre, dan Pengumuman juga punya
+  mini player. Tombol **✕** menghentikan pemutaran sepenuhnya.
+- **Radio**: antrean native hanya berisi stasiun yang sedang diputar, jadi berpindah stasiun terasa instan;
+  tombol berikutnya/sebelumnya berpindah ke stasiun lain dalam daftar. Stasiun yang tidak bersuara dalam 20 detik
+  dihentikan dengan pesan, tidak menggantung.
+- **Stabilitas**: posisi lagu dipisah dari status pemutar utama (layar besar tidak digambar ulang 2×/detik),
+  pembacaan status berhenti saat aplikasi di latar belakang, notifikasi adzan hanya dijadwalkan ulang bila jadwalnya
+  berubah, perubahan tema sistem tidak memasang ulang layar saat aplikasi di latar belakang, sesi tetap terbuka saat
+  offline (data akun terakhir disimpan), dan error tak terduga menampilkan tombol **Muat ulang**, bukan layar gelap.
+

@@ -98,11 +98,11 @@ export default function SholatScreen() {
             <View style={s.row}>
               <View style={[s.dot, { backgroundColor: C.ok }]} />
               <Text style={[s.label, { flex: 1 }]} numberOfLines={2}>
-                {adz.suara.jenis === 'lagu' ? T('Suara: {s}', { s: adz.suara.title || T('lagu dari pustaka') }) : T('Suara adzan bawaan server')}
+                {S.paksa ? T('Suara adzan diatur administrator untuk semua akun') : adz.suara.jenis === 'lagu' ? T('Suara: {s}', { s: adz.suara.title || T('lagu dari pustaka') }) : T('Suara adzan bawaan server')}
               </Text>
-              {adz.suara.jenis === 'lagu' ? <Pressable onPress={() => save({ sholat: { adzan: { suara: { jenis: 'bawaan' } } } })}><Text style={s.link}>{T('Bawaan')}</Text></Pressable> : null}
+              {adz.suara.jenis === 'lagu' && !S.paksa ? <Pressable onPress={() => save({ sholat: { adzan: { suara: { jenis: 'bawaan' } } } })}><Text style={s.link}>{T('Bawaan')}</Text></Pressable> : null}
             </View>
-            <Text style={s.small}>{T('Ganti suara adzan: menu ⋮ pada lagu/file adzan di Pustaka → “Jadikan suara adzan”.')}</Text>
+            {S.paksa ? null : <Text style={s.small}>{T('Ganti suara adzan: menu ⋮ pada lagu/file adzan di Pustaka → “Jadikan suara adzan”.')}</Text>}
             <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
               <Button label={S.playing ? 'Hentikan' : 'Uji suara adzan'} icon={S.playing ? 'stop' : 'play'} kind="ghost"
                 onPress={() => (S.playing ? S.stopAdzan() : S.playAdzan('dzuhur', { test: true }))} />

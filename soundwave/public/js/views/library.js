@@ -3,7 +3,7 @@ import { h, icon, I, cover, collage, fmtDur, toast, actionMenu, promptDialog, co
 import { get, post, put, patch, del } from '../api.js';
 import { store, on, loadTracks, driveReady, toggleFavorite } from '../store.js';
 import { playList, playNext, addToQueue, current } from '../player.js';
-import { savePrefs as saveSholatPrefs } from '../sholat.js';
+import { savePrefs as saveSholatPrefs, sholat as sholatState } from '../sholat.js';
 import { isFavRadio, toggleRadioFav } from '../radio.js';
 import { localState, fsaSupported, pickFolder, reconnect, rescan, forgetFolder, setLocalGenre, localById } from '../local.js';
 
@@ -63,7 +63,7 @@ export function trackMenu(t, ctx = {}) {
     !t.quran && t.artist && t.artist !== 'Tidak diketahui' && { label: `Lihat artis: ${t.artist}`, icon: I.user, run: () => { location.hash = '#/artis/' + encodeURIComponent(t.artist); } },
     t.quran && !t.quran.ayat && { label: 'Ulangi / hafalan…', icon: 'M4 6h16M4 10h10M4 14h12M17 17l2 2 3-4', run: () => hafalanMenu(t) },
     !t.quran && { label: `Ubah genre${t.genre ? ` (${t.genre})` : ''}`, icon: 'M4 7h16M4 12h10M4 17h6', run: () => editGenre(t, ctx) },
-    !t.quran && { label: 'Jadikan suara adzan', icon: 'M12 3c3 2 5 4.5 5 8H7c0-3.5 2-6 5-8zM5 11h14v10H5z', run: async () => {
+    !t.quran && !sholatState.global?.paksa && { label: 'Jadikan suara adzan', icon: 'M12 3c3 2 5 4.5 5 8H7c0-3.5 2-6 5-8zM5 11h14v10H5z', run: async () => {
       try { await saveSholatPrefs({ sholat: { adzan: { suara: { jenis: 'lagu', id: t.id, title: t.title, local: Boolean(t.local) } } } }); toast(`“${t.title}” dipakai sebagai suara adzan`); } catch (e) { toast(e.message, { type: 'error' }); }
     } },
     pl && ctx.index > 0 && { label: 'Naikkan', icon: 'M12 19V5M6 11l6-6 6 6', run: () => move(pl, ctx.index, -1, ctx) },

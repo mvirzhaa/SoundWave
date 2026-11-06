@@ -66,7 +66,8 @@ export async function api<T = any>(path: string, opts: Opts = {}): Promise<T> {
     clearTimeout(timer);
   }
   const data: any = await res.json().catch(() => ({}));
-  if (res.status === 401 && data.code === 'UNAUTHENTICATED') onUnauthorized?.();
+  // Sesi berakhir atau akun dinonaktifkan admin → keluar
+  if (res.status === 401 && (data.code === 'UNAUTHENTICATED' || data.code === 'ACCOUNT_DISABLED')) onUnauthorized?.();
   if (!res.ok) throw new ApiError(data.error || `Kesalahan ${res.status}`, res.status, data.code);
   return data as T;
 }
@@ -75,7 +76,7 @@ export const get = <T = any>(p: string, o?: Opts) => api<T>(p, o);
 export const post = <T = any>(p: string, body: unknown = {}) => api<T>(p, { method: 'POST', body });
 export const put = <T = any>(p: string, body: unknown = {}) => api<T>(p, { method: 'PUT', body });
 export const patch = <T = any>(p: string, body: unknown = {}) => api<T>(p, { method: 'PATCH', body });
-export const del = <T = any>(p: string) => api<T>(p, { method: 'DELETE' });
+export const del = <T = any>(p: string, body?: unknown) => api<T>(p, { method: 'DELETE', body });
 
 /** Token pendek untuk URL streaming/unduh (dipakai pemutar & unduhan offline). */
 export async function mediaToken(): Promise<string> {

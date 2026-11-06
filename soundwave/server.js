@@ -54,12 +54,24 @@ apiRouter.use('/lyrics', require('./routes/lyrics'));
 apiRouter.use('/sholat', require('./routes/sholat'));
 apiRouter.use('/quran', require('./routes/quran'));
 apiRouter.use('/radio', require('./routes/radio'));
+apiRouter.use('/pengumuman', require('./routes/pengumuman'));
+apiRouter.use('/admin', require('./routes/admin'));
 apiRouter.use('/', require('./routes/media'));
 apiRouter.use((req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan.' }));
 
 app.use('/api', apiRouter);
 if (cfg.BASE_PATH) {
   app.use(`${cfg.BASE_PATH}/api`, apiRouter);
+}
+
+// Panel superadmin (halaman login terpisah dari pengguna biasa)
+function sendAdmin(req, res) {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+}
+app.get(['/admin', '/admin/'], sendAdmin);
+if (cfg.BASE_PATH) {
+  app.get([`${cfg.BASE_PATH}/admin`, `${cfg.BASE_PATH}/admin/`], sendAdmin);
 }
 
 /**
@@ -104,6 +116,8 @@ app.use((err, req, res, next) => {
   if (res.headersSent) return res.end();
   res.status(status).json({ error: status >= 500 && !err.code ? 'Terjadi kesalahan di server.' : err.message, code: err.code });
 });
+
+require('./lib/admin').bootstrap();
 
 app.listen(cfg.PORT, () => {
   console.log(`SoundWave berjalan di ${cfg.PUBLIC_URL} (port ${cfg.PORT})`);

@@ -67,7 +67,9 @@ export function renderSholat(view) {
       h('div.panel-card', {}, h('h3', { text: `Hari ini · ${formatTanggal(todayIn(j.tz))}` }), table)));
 
     /* Pengaturan adzan */
-    const suara = adz.suara?.jenis === 'lagu' ? `Lagu dari pustaka: ${adz.suara.title || adz.suara.id}` : 'Suara adzan bawaan server';
+    const paksa = sholat.global?.paksa;
+    const suara = paksa ? 'Suara adzan diatur administrator untuk semua akun'
+      : adz.suara?.jenis === 'lagu' ? `Lagu dari pustaka: ${adz.suara.title || adz.suara.id}` : 'Suara adzan bawaan server';
     const vol = h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: adz.volume ?? 0.9, 'aria-label': 'Volume adzan' });
     vol.addEventListener('change', () => savePrefs({ sholat: { adzan: { volume: Number(vol.value) } } }));
     page.append(h('div.panel-card', {},
@@ -76,10 +78,10 @@ export function renderSholat(view) {
       toggleRow('Jeda musik saat adzan, lanjutkan sesudahnya', adz.jedaMusik !== false, (v) => savePrefs({ sholat: { adzan: { jedaMusik: v } } })),
       h('label.vol-row', {}, h('span', { text: 'Volume' }), vol),
       h('div.status-line', {}, h('span.dot.ok'), h('span', { text: suara })),
-      h('p.hint', { text: 'Ganti suara adzan: buka menu ⋮ pada lagu/file adzan di Pustaka → "Jadikan suara adzan".' }),
+      paksa ? null : h('p.hint', { text: 'Ganti suara adzan: buka menu ⋮ pada lagu/file adzan di Pustaka → "Jadikan suara adzan".' }),
       h('div.btn-row', {},
         h('button.btn', { type: 'button', onclick: () => (sholat.playing ? stopAdzan() : playAdzan('dzuhur', { test: true })) }, icon('M8 5v14l11-7z'), 'Uji suara adzan'),
-        adz.suara?.jenis === 'lagu' ? h('button.link', { type: 'button', text: 'Kembali ke suara bawaan', onclick: () => savePrefs({ sholat: { adzan: { suara: { jenis: 'bawaan' } } } }) }) : null,
+        adz.suara?.jenis === 'lagu' && !paksa ? h('button.link', { type: 'button', text: 'Kembali ke suara bawaan', onclick: () => savePrefs({ sholat: { adzan: { suara: { jenis: 'bawaan' } } } }) }) : null,
         'Notification' in window && Notification.permission !== 'granted' ? h('button.link', {
           type: 'button', text: 'Aktifkan notifikasi browser',
           onclick: () => Notification.requestPermission().then((r) => { toast(r === 'granted' ? 'Notifikasi aktif' : 'Notifikasi ditolak browser'); draw(); }),

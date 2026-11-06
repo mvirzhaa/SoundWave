@@ -99,7 +99,48 @@ CREATE TABLE IF NOT EXISTS recent_plays (
   const cols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
   // drive_mode: 'oauth' (login Google, baca+tulis) | 'link' (link folder publik + API key, hanya baca)
   if (!cols.has('drive_mode')) db.exec('ALTER TABLE users ADD COLUMN drive_mode TEXT');
+  // Dinonaktifkan superadmin (1) & terakhir aktif (ms) untuk panel admin
+  if (!cols.has('disabled')) db.exec('ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0');
+  if (!cols.has('last_seen')) db.exec('ALTER TABLE users ADD COLUMN last_seen INTEGER');
 }
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS admins (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    token_version INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    last_login INTEGER
+  );
+  CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS announcements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    link TEXT,
+    level TEXT NOT NULL DEFAULT 'info',
+    created_at INTEGER NOT NULL,
+    created_by INTEGER,
+    push_ok INTEGER NOT NULL DEFAULT 0,
+    push_fail INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS announcement_reads (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ann_id INTEGER NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+    read_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, ann_id)
+  );
+  CREATE TABLE IF NOT EXISTS push_tokens (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    platform TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+`);
 
 
 /** Jalankan fungsi dalam transaksi. */

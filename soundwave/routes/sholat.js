@@ -1,12 +1,9 @@
 'use strict';
 /** Jadwal sholat, pengaturan wilayah & adzan, serta file suara adzan. */
-const fs = require('fs');
-const path = require('path');
 const express = require('express');
 const A = require('../lib/auth');
 const S = require('../lib/sholat');
 const Prefs = require('../lib/prefs');
-const { DATA_DIR } = require('../lib/config');
 
 const r = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -65,43 +62,19 @@ r.get('/jadwal', auth, wrap(async (req, res) => {
 r.get('/pengaturan', auth, (req, res) => res.json(Prefs.get(req.user.id)));
 r.put('/pengaturan', auth, (req, res) => res.json(Prefs.update(req.user.id, req.body)));
 
-/* ---------- Suara adzan bawaan server ---------- */
-// Letakkan file di folder data/: adzan.mp3 (umum) dan opsional adzan-subuh.mp3,
-// atau isi ADZAN_URL / ADZAN_SUBUH_URL agar diunduh otomatis sekali.
-const FILES = { umum: 'adzan.mp3', subuh: 'adzan-subuh.mp3' };
-const URLS = { umum: process.env.ADZAN_URL, subuh: process.env.ADZAN_SUBUH_URL };
-const fetching = {};
+/* ---------- Suara adzan global (diatur superadmin / file di data/) ---------- */
+const Adzan = require('../lib/adzan');
+const ensureFile = Adzan.ensureFile;
 
-async function ensureFile(jenis) {
-  const file = path.join(DATA_DIR, FILES[jenis]);
-  if (fs.existsSync(file)) return file;
-  const url = URLS[jenis];
-  if (!url) return null;
-  if (!fetching[jenis]) {
-    fetching[jenis] = (async () => {
-      const res = await fetch(url, { signal: AbortSignal.timeout(60000), headers: { 'User-Agent': 'SoundWave/1.0' } });
-      if (!res.ok) throw new Error(`Gagal mengunduh adzan (${res.status})`);
-      const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.length < 10000) throw new Error('File adzan terlalu kecil / bukan audio.');
-      fs.writeFileSync(file, buf);
-      return file;
-    })().finally(() => { delete fetching[jenis]; });
-  }
-  return fetching[jenis];
-}
-
-r.get('/adzan', auth, wrap(async (req, res) => {
-  const umum = await ensureFile('umum').catch(() => null);
-  const subuh = await ensureFile('subuh').catch(() => null);
-  res.json({ tersedia: Boolean(umum), subuh: Boolean(subuh) });
-}));
+r.get('/adzan', auth, wrap(async (req, res) => { res.json(await Adzan.status()); }));
 
 r.get('/adzan/:jenis', A.requireAuth({ media: true }), wrap(async (req, res) => {
   let jenis = req.params.jenis === 'subuh' ? 'subuh' : 'umum';
   let file = await ensureFile(jenis).catch(() => null);
   if (!file && jenis === 'subuh') file = await ensureFile('umum').catch(() => null);
   if (!file) return res.status(404).json({ error: 'Suara adzan bawaan belum dipasang di server. Pilih suara adzan dari Pustaka di pengaturan.', code: 'NO_ADZAN' });
-  res.setHeader('Cache-Control', 'private, max-age=86400');
+  // ?v=<versi> dari status → cache browser aman; versi berganti saat admin mengganti suara
+  res.setHeader('Cache-Control', req.query.v ? 'private, max-age=604800' : 'no-cache');
   res.sendFile(file);
 }));
 

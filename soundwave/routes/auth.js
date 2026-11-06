@@ -53,6 +53,7 @@ r.post('/login', loginLimiter, (req, res) => {
   const user = findByEmail.get(email);
   const ok = A.verifyPassword(password, user ? user.password_hash : A.DUMMY_HASH);
   if (!user || !ok) return res.status(401).json({ error: 'Email atau kata sandi salah.' });
+  if (user.disabled) return res.status(403).json({ error: 'Akun Anda dinonaktifkan administrator. Hubungi admin SoundWave.', code: 'ACCOUNT_DISABLED' });
   issue(res, user);
 });
 

@@ -62,6 +62,7 @@ function clearSessionCookie(res) {
 }
 
 const getUser = db.prepare('SELECT * FROM users WHERE id = ?');
+const touchSeen = db.prepare('UPDATE users SET last_seen = ? WHERE id = ?');
 
 /** Validasi token dan kembalikan baris user, atau null. */
 function userFromToken(token, typ) {
@@ -85,6 +86,10 @@ function requireAuth(opts = {}) {
     else if (req.cookies?.[COOKIE]) { user = userFromToken(req.cookies[COOKIE], 'session'); via = 'cookie'; }
     if (!user && opts.media && typeof req.query.t === 'string') { user = userFromToken(req.query.t, 'media'); via = 'media'; }
     if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.', code: 'UNAUTHENTICATED' });
+    if (user.disabled) return res.status(401).json({ error: 'Akun Anda dinonaktifkan administrator.', code: 'ACCOUNT_DISABLED' });
+    // Catat "terakhir aktif" paling sering tiap 5 menit (untuk panel admin)
+    const now = Date.now();
+    if (!user.last_seen || now - user.last_seen > 300000) { try { touchSeen.run(now, user.id); } catch { /* abaikan */ } }
 
     // Perlindungan CSRF untuk sesi cookie: header kustom tidak bisa dikirim lintas situs tanpa CORS
     if (via === 'cookie' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.get('X-SW-CSRF') !== '1') {
