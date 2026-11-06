@@ -1,5 +1,6 @@
 /** Pemutar penuh: sampul, posisi, kontrol, favorit, acak, ulangi, antrean. */
 import React, { useState } from 'react';
+import { T } from '../lib/i18n';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +13,8 @@ import { Cover } from '../components/Cover';
 import { SeekBar } from '../components/Common';
 import { Lyrics } from '../components/Lyrics';
 import { isOffline } from '../lib/offline';
-import { C, fmtDur } from '../lib/theme';
+import { C, fmtDur, themed } from '../lib/theme';
+import { isFavRadio, toggleRadioFav, useRadioFav } from '../lib/radio';
 
 export default function PlayerScreen() {
   const p = usePlayer();
@@ -21,31 +23,32 @@ export default function PlayerScreen() {
   const menu = useTrackMenu();
   const { width } = useWindowDimensions();
   const params = useLocalSearchParams<{ lyrics?: string }>();
-  const [view, setView] = useState<'art' | 'queue' | 'lyrics'>(params.lyrics === '1' ? 'lyrics' : 'art');
+  const [view, setView] = useState<'art' | 'queue' | 'lyrics'>(params.lyrics === '1' || (p.current?.quran && !p.current.radio) ? 'lyrics' : 'art');
   const showQueue = view === 'queue';
   const toggleView = (v: 'queue' | 'lyrics') => setView((cur) => (cur === v ? 'art' : v));
   const t = p.current;
+  useRadioFav(); // render ulang saat favorit radio berubah
 
   if (!t) {
     return (
       <SafeAreaView style={s.wrap}>
         <Pressable onPress={() => router.back()} style={s.iconBtn}><Ionicons name="chevron-down" size={28} color={C.text} /></Pressable>
-        <Text style={{ color: C.muted, textAlign: 'center', marginTop: 40 }}>Tidak ada lagu yang diputar.</Text>
+        <Text style={{ color: C.muted, textAlign: 'center', marginTop: 40 }}>{T('Tidak ada lagu yang diputar.')}</Text>
       </SafeAreaView>
     );
   }
-  const fav = lib.favorites.has(t.id);
+  const fav = t.radio ? isFavRadio(t.radio.uuid) : lib.favorites.has(t.id);
   const art = Math.min(width - 56, 380);
 
   return (
     <SafeAreaView style={s.wrap}>
       <View style={s.top}>
-        <Pressable onPress={() => router.back()} style={s.iconBtn} accessibilityLabel="Tutup"><Ionicons name="chevron-down" size={28} color={C.text} /></Pressable>
+        <Pressable onPress={() => router.back()} style={s.iconBtn} accessibilityLabel={T("Tutup")}><Ionicons name="chevron-down" size={28} color={C.text} /></Pressable>
         <View style={{ alignItems: 'center', flex: 1 }}>
-          <Text style={s.eyebrow}>MEMUTAR DARI</Text>
+          <Text style={s.eyebrow}>{T('MEMUTAR DARI')}</Text>
           <Text style={s.source} numberOfLines={1}>{p.source}</Text>
         </View>
-        <Pressable onPress={() => menu.open(t, { fromPlayer: true })} style={s.iconBtn} accessibilityLabel="Menu"><Ionicons name="ellipsis-vertical" size={22} color={C.text} /></Pressable>
+        <Pressable onPress={() => menu.open(t, { fromPlayer: true })} style={s.iconBtn} accessibilityLabel={T("Menu")}><Ionicons name="ellipsis-vertical" size={22} color={C.text} /></Pressable>
       </View>
 
       {view === 'lyrics' ? (
@@ -57,7 +60,7 @@ export default function PlayerScreen() {
           keyExtractor={(x, i) => `${x.id}-${i}`}
           initialScrollIndex={Math.max(0, p.index)}
           getItemLayout={(_, i) => ({ length: 58, offset: 58 * i, index: i })}
-          ListHeaderComponent={<Text style={s.qHead}>Antrean · {p.queue.length} lagu</Text>}
+          ListHeaderComponent={<Text style={s.qHead}>{T('Antrean · {n} lagu', { n: p.queue.length })}</Text>}
           renderItem={({ item, index }) => (
             <Pressable style={[s.qRow, index === p.index && { backgroundColor: C.surface }]} onPress={() => p.jumpTo(index)}>
               <Text style={[s.qNum, index === p.index && { color: C.accent }]}>{index === p.index ? '▶' : index + 1}</Text>
@@ -73,37 +76,43 @@ export default function PlayerScreen() {
         />
       ) : (
         <View style={s.artWrap}>
-          <Cover ytId={t.ytId} uri={t.coverUri} quran={t.quran?.surat} seed={t.artist + t.title} size={art} radius={22} hq />
+          <Cover ytId={t.ytId} uri={t.coverUri} quran={t.quran?.surat} radio={t.radio ? t.radio.freq || '' : undefined} seed={t.artist + t.title} size={art} radius={22} hq />
         </View>
       )}
 
       <View style={s.meta}>
         <View style={{ flex: 1 }}>
           <Text style={s.title} numberOfLines={1}>{t.title}</Text>
-          <Text style={s.artist} numberOfLines={1}>{t.artist}{isOffline(t.id) ? '  ·  offline' : ''}</Text>
+          <Text style={s.artist} numberOfLines={1}>{t.artist}{isOffline(t.id) ? T('  ·  offline') : ''}</Text>
         </View>
-        <Pressable hitSlop={10} accessibilityLabel="Favorit" onPress={async () => {
-          try { const f = await lib.toggleFavorite(t); ui.toast(f ? 'Ditambahkan ke Favorit' : 'Dihapus dari Favorit'); } catch (e: any) { ui.toast(e.message, true); }
+        <Pressable hitSlop={10} accessibilityLabel={T("Favorit")} onPress={async () => {
+          try { const f = t.radio ? await toggleRadioFav(t.radio) : await lib.toggleFavorite(t); ui.toast(f ? T('Ditambahkan ke Favorit') : T('Dihapus dari Favorit')); } catch (e: any) { ui.toast(e.message, true); }
         }}>
           <Ionicons name={fav ? 'heart' : 'heart-outline'} size={28} color={fav ? C.accent : C.text} />
         </Pressable>
       </View>
 
       <View style={{ paddingHorizontal: 24 }}>
-        <SeekBar value={p.position} max={p.duration || t.duration || 0} onSeek={p.seek} />
-        <View style={s.times}><Text style={s.time}>{fmtDur(p.position)}</Text><Text style={s.time}>{fmtDur(p.duration || t.duration || 0)}</Text></View>
+        {t.radio ? (
+          <View style={s.live}><View style={s.liveDot} /><Text style={s.liveText}>{T('LIVE')}</Text><Text style={s.time}>{fmtDur(p.position)}</Text></View>
+        ) : (
+          <>
+            <SeekBar value={p.position} max={p.duration || t.duration || 0} onSeek={p.seek} />
+            <View style={s.times}><Text style={s.time}>{fmtDur(p.position)}</Text><Text style={s.time}>{fmtDur(p.duration || t.duration || 0)}</Text></View>
+          </>
+        )}
       </View>
 
       <View style={s.ctl}>
-        <Pressable hitSlop={8} onPress={() => p.setShuffle(!p.shuffle)} accessibilityLabel="Acak">
+        <Pressable hitSlop={8} onPress={() => p.setShuffle(!p.shuffle)} accessibilityLabel={T("Acak")}>
           <Ionicons name="shuffle" size={26} color={p.shuffle ? C.accent : C.muted} />
         </Pressable>
-        <Pressable hitSlop={8} onPress={p.prev} accessibilityLabel="Sebelumnya"><Ionicons name="play-skip-back" size={34} color={C.text} /></Pressable>
-        <Pressable onPress={p.toggle} style={s.play} accessibilityLabel={p.playing ? 'Jeda' : 'Putar'}>
+        <Pressable hitSlop={8} onPress={p.prev} accessibilityLabel={T("Sebelumnya")}><Ionicons name="play-skip-back" size={34} color={C.text} /></Pressable>
+        <Pressable onPress={p.toggle} style={s.play} accessibilityLabel={p.playing ? T('Jeda') : T('Putar')}>
           {p.buffering && !p.playing ? <ActivityIndicator color="#fff" /> : <Ionicons name={p.playing ? 'pause' : 'play'} size={36} color="#fff" style={!p.playing && { marginLeft: 4 }} />}
         </Pressable>
-        <Pressable hitSlop={8} onPress={p.next} accessibilityLabel="Berikutnya"><Ionicons name="play-skip-forward" size={34} color={C.text} /></Pressable>
-        <Pressable hitSlop={8} onPress={() => { const m = p.cycleRepeat(); ui.toast({ off: 'Ulangi: mati', all: 'Ulangi semua', one: 'Ulangi satu lagu' }[m]); }} accessibilityLabel="Ulangi">
+        <Pressable hitSlop={8} onPress={p.next} accessibilityLabel={T("Berikutnya")}><Ionicons name="play-skip-forward" size={34} color={C.text} /></Pressable>
+        <Pressable hitSlop={8} onPress={() => { const m = p.cycleRepeat(); ui.toast(T({ off: 'Ulangi: mati', all: 'Ulangi semua', one: 'Ulangi satu lagu' }[m])); }} accessibilityLabel={T("Ulangi")}>
           <View>
             <Ionicons name="repeat" size={26} color={p.repeat === 'off' ? C.muted : C.accent} />
             {p.repeat === 'one' ? <Text style={s.one}>1</Text> : null}
@@ -112,15 +121,15 @@ export default function PlayerScreen() {
       </View>
 
       <View style={s.bottom}>
-        <Pressable style={[s.pill, view === 'lyrics' && { borderColor: C.accent }]} onPress={() => toggleView('lyrics')}>
+        {t.radio ? null : <Pressable style={[s.pill, view === 'lyrics' && { borderColor: C.accent }]} onPress={() => toggleView('lyrics')}>
           <Ionicons name="document-text-outline" size={18} color={view === 'lyrics' ? C.accent : C.text} />
-          <Text style={[s.pillText, view === 'lyrics' && { color: C.accent }]}>{t.quran ? 'Ayat' : 'Lirik'}</Text>
-        </Pressable>
+          <Text style={[s.pillText, view === 'lyrics' && { color: C.accent }]}>{t.quran ? T('Ayat') : T('Lirik')}</Text>
+        </Pressable>}
         <Pressable style={[s.pill, showQueue && { borderColor: C.accent }]} onPress={() => toggleView('queue')}>
           <Ionicons name="list" size={18} color={showQueue ? C.accent : C.text} />
-          <Text style={[s.pillText, showQueue && { color: C.accent }]}>Antrean</Text>
+          <Text style={[s.pillText, showQueue && { color: C.accent }]}>{T('Antrean')}</Text>
         </Pressable>
-        <Pressable style={s.pill} onPress={() => router.push('/voice')} accessibilityLabel="Perintah suara">
+        <Pressable style={s.pill} onPress={() => router.push('/voice')} accessibilityLabel={T("Perintah suara")}>
           <Ionicons name="mic" size={18} color={C.accent} />
         </Pressable>
       </View>
@@ -128,7 +137,10 @@ export default function PlayerScreen() {
   );
 }
 
-const s = StyleSheet.create({
+const s = themed(() => StyleSheet.create({
+  live: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14 },
+  liveDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#ef4444' },
+  liveText: { color: '#ef4444', fontWeight: '800', letterSpacing: 1, flex: 1 },
   wrap: { flex: 1, backgroundColor: '#120f33' },
   top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8 },
   iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
@@ -151,4 +163,4 @@ const s = StyleSheet.create({
   qNum: { width: 24, color: C.muted, textAlign: 'center' },
   qTitle: { color: C.text, fontWeight: '600' },
   qArtist: { color: C.muted, fontSize: 13 },
-});
+}));

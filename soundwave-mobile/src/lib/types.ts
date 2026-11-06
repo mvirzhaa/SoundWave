@@ -1,5 +1,9 @@
 export type DriveInfo = {
   configured: boolean;
+  linkAvailable?: boolean;
+  mode?: 'oauth' | 'link' | null;
+  readOnly?: boolean;
+  ready?: boolean;
   connected: boolean;
   googleEmail: string | null;
   folderId: string | null;
@@ -33,6 +37,8 @@ export type Track = {
   tagGenre?: string | null;
   coverUri?: string | null; // sampul dari tag ID3
   added?: number;
+  // --- radio internet ---
+  radio?: Station;
   // --- murottal (playlist Hapalan Quran) ---
   url?: string; // audio langsung (CDN equran.id)
   quran?: { surat: number; nama: string; arti: string; jumlahAyat: number; tempatTurun: string; ayat?: number };
@@ -64,4 +70,10 @@ export type VoiceResult = {
   added?: number;
   message: string;
   code?: string;
+};
+
+export type Station = {
+  id: string; uuid: string; name: string; url: string; https: boolean; favicon: string | null; homepage?: string | null;
+  freq: string | null; tags: string[]; country: string; countrycode: string; state: string; language?: string;
+  codec: string; bitrate: number; votes?: number;
 };

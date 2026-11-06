@@ -4,6 +4,7 @@
  * Hasilnya dibacakan dengan text-to-speech.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { T } from '../lib/i18n';
 import { Animated, Easing, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +15,7 @@ import { post } from '../lib/api';
 import { useLibrary } from '../lib/library';
 import { summarize } from '../lib/local';
 import { usePlayer } from '../lib/player';
-import { C } from '../lib/theme';
+import { C, themed } from '../lib/theme';
 import type { VoiceResult } from '../lib/types';
 
 const EXAMPLES = [
@@ -27,7 +28,7 @@ export default function VoiceScreen() {
   const lib = useLibrary();
   const [listening, setListening] = useState(false);
   const [heard, setHeard] = useState('');
-  const [status, setStatus] = useState('Ketuk mikrofon lalu bicara');
+  const [status, setStatus] = useState(T('Ketuk mikrofon lalu bicara'));
   const [typed, setTyped] = useState('');
   const [result, setResult] = useState<VoiceResult | null>(null);
   const wasPlaying = useRef(false);
@@ -39,7 +40,7 @@ export default function VoiceScreen() {
     Animated.loop(Animated.timing(pulse, { toValue: 1, duration: 1300, easing: Easing.out(Easing.quad), useNativeDriver: true })).start();
   }, [listening, pulse]);
 
-  useSpeechRecognitionEvent('start', () => { setListening(true); setStatus('Mendengarkan… silakan bicara'); });
+  useSpeechRecognitionEvent('start', () => { setListening(true); setStatus(T('Mendengarkan… silakan bicara')); });
   useSpeechRecognitionEvent('end', () => setListening(false));
   useSpeechRecognitionEvent('result', (e) => {
     const text = e.results[0]?.transcript || '';
@@ -51,15 +52,15 @@ export default function VoiceScreen() {
     setStatus(e.error === 'no-speech' || e.error === 'speech-timeout' ? 'Tidak terdengar suara. Ketuk mikrofon untuk mencoba lagi.'
       : e.error === 'not-allowed' ? 'Izin mikrofon ditolak. Izinkan di Pengaturan HP.'
         : e.error === 'language-not-supported' ? 'Bahasa Indonesia belum tersedia di pengenal suara HP ini.'
-          : `Pengenal suara: ${e.message || e.error}`);
+          : T('Pengenal suara: {e}', { e: e.message || e.error }));
     if (wasPlaying.current) player.resume();
   });
 
   const start = async () => {
     Speech.stop();
     const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-    if (!perm.granted) { setStatus('Izin mikrofon & pengenal suara diperlukan.'); return; }
-    if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) { setStatus('Pengenal suara tidak tersedia di perangkat ini. Ketik perintah di bawah.'); return; }
+    if (!perm.granted) { setStatus(T('Izin mikrofon & pengenal suara diperlukan.')); return; }
+    if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) { setStatus(T('Pengenal suara tidak tersedia di perangkat ini. Ketik perintah di bawah.')); return; }
     // Jeda musik saat mendengarkan agar ucapan terdengar jelas
     wasPlaying.current = player.playing;
     if (player.playing) player.pause();
@@ -77,7 +78,7 @@ export default function VoiceScreen() {
 
   async function run(text: string) {
     setHeard(text);
-    setStatus('Memproses…');
+    setStatus(T('Memproses…'));
     try {
       const r = await post<VoiceResult>('/api/voice', { text, localTracks: summarize(lib.localTracks) });
       // Lagu lokal dari hasil server → objek lengkap (dengan uri file di HP)
@@ -86,7 +87,7 @@ export default function VoiceScreen() {
       setStatus(r.message || 'Selesai.');
       if (r.action === 'play' && r.tracks?.length) {
         // Bacakan dulu, baru putar agar suara TTS tidak bertabrakan dengan musik
-        say(r.message, () => { player.playList(r.tracks!, r.shuffle ? null : 0, { shuffle: !!r.shuffle, source: r.label || 'Perintah suara' }); });
+        say(r.message, () => { player.playList(r.tracks!, r.shuffle ? null : 0, { shuffle: !!r.shuffle, source: r.label || T('Perintah suara') }); });
         setTimeout(() => router.back(), 1600);
         return;
       }
@@ -97,7 +98,7 @@ export default function VoiceScreen() {
         else if (r.command === 'previous') { player.prev(); if (wasPlaying.current) player.resume(); }
         else if (r.command === 'lyrics') {
           if (wasPlaying.current) player.resume();
-          if (!player.current) { setStatus('Belum ada lagu yang diputar.'); return; }
+          if (!player.current) { setStatus(T('Belum ada lagu yang diputar.')); return; }
           router.back();
           setTimeout(() => router.push({ pathname: '/player', params: { lyrics: '1' } }), 350);
           return;
@@ -123,11 +124,11 @@ export default function VoiceScreen() {
             <Pressable onPress={() => router.back()} hitSlop={10}><Ionicons name="close" size={28} color={C.text} /></Pressable>
           </View>
           <ScrollView contentContainerStyle={s.center} keyboardShouldPersistTaps="handled">
-            <Text style={s.h1}>Perintah suara</Text>
+            <Text style={s.h1}>{T('Perintah suara')}</Text>
             <View style={s.orbWrap}>
               {listening ? <Animated.View style={[s.ring, ring]} /> : null}
               <Pressable onPress={() => (listening ? ExpoSpeechRecognitionModule.stop() : start())} style={[s.orb, listening && { backgroundColor: C.accent2 }]}
-                accessibilityLabel={listening ? 'Berhenti mendengarkan' : 'Mulai mendengarkan'}>
+                accessibilityLabel={listening ? T('Berhenti mendengarkan') : T('Mulai mendengarkan')}>
                 <Ionicons name={listening ? 'mic' : 'mic-outline'} size={46} color="#fff" />
               </Pressable>
             </View>
@@ -141,7 +142,7 @@ export default function VoiceScreen() {
             ) : null}
 
             <View style={s.form}>
-              <TextInput style={s.input} value={typed} onChangeText={setTyped} placeholder="atau ketik perintah…" placeholderTextColor={C.muted}
+              <TextInput style={s.input} value={typed} onChangeText={setTyped} placeholder={T("atau ketik perintah…")} placeholderTextColor={C.muted}
                 returnKeyType="send" onSubmitEditing={() => { if (typed.trim()) { ExpoSpeechRecognitionModule.abort(); run(typed.trim()); setTyped(''); } }} />
             </View>
             <View style={s.examples}>
@@ -158,7 +159,7 @@ export default function VoiceScreen() {
   );
 }
 
-const s = StyleSheet.create({
+const s = themed(() => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(7,11,29,.97)' },
   top: { flexDirection: 'row', justifyContent: 'flex-end', padding: 16 },
   center: { alignItems: 'center', paddingHorizontal: 24, paddingBottom: 32, gap: 12 },
@@ -174,4 +175,4 @@ const s = StyleSheet.create({
   examples: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   chip: { borderWidth: 1, borderColor: C.border, backgroundColor: C.surface, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
   chipText: { color: C.muted, fontSize: 13 },
-});
+}));

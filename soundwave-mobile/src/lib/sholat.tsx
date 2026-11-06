@@ -7,6 +7,7 @@
  * - Jadwal & suara adzan disimpan di HP sehingga tetap jalan saat offline.
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { T } from './i18n';
 import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,7 +21,7 @@ import { useAuth } from './auth';
 import { useLibrary } from './library';
 import { usePlayer } from './player';
 import { offlineUri } from './offline';
-import { C } from './theme';
+import { C, themed } from './theme';
 import { deviceTz, fmtJam, hitungBulan, jarakKm, Jadwal, namaWaktu, Next, titleCase, todayIn, upcoming, Wajib } from './prayer';
 
 export type Kota = { id: string; lokasi: string; daerah?: string };
@@ -88,7 +89,7 @@ Notifications.setNotificationHandler({
 async function ensureChannel() {
   if (Platform.OS !== 'android') return;
   await Notifications.setNotificationChannelAsync(CHANNEL, {
-    name: 'Adzan waktu sholat',
+    name: T('Adzan waktu sholat'),
     importance: Notifications.AndroidImportance.MAX,
     sound: NOTIF_SOUND || 'default',
     vibrationPattern: [0, 400, 250, 400],
@@ -112,7 +113,7 @@ async function scheduleNotifications(j: Jadwal | null, p: Prefs | null) {
       await Notifications.scheduleNotificationAsync({
         identifier: `adzan-${n.date}-${n.key}`,
         content: {
-          title: `Waktu ${namaWaktu[n.key]} telah tiba`,
+          title: T('Waktu {w} telah tiba', { w: T(namaWaktu[n.key]) }),
           body: `${fmtJam(n.jam)} ${j.zona}${lokasi ? ` · ${lokasi}` : ''}`,
           data: { sw: 'adzan', key: n.key, jam: n.jam, at: n.at },
           sound: NOTIF_SOUND || 'default',
@@ -216,11 +217,11 @@ export function SholatProvider({ children }: { children: React.ReactNode }) {
     try {
       let perm = await Location.getForegroundPermissionsAsync();
       if (!perm.granted && opts.interactive) perm = await Location.requestForegroundPermissionsAsync();
-      if (!perm.granted) { setLocError('Izin lokasi belum diberikan. Aktifkan di Pengaturan HP atau pilih wilayah secara manual.'); return; }
+      if (!perm.granted) { setLocError(T('Izin lokasi belum diberikan. Aktifkan di Pengaturan HP atau pilih wilayah secara manual.')); return; }
       setLocating(true);
       const pos = opts.pos || await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
         .catch(() => Location.getLastKnownPositionAsync({ maxAge: 30 * 60000 }));
-      if (!pos) throw new Error('Lokasi tidak terdeteksi. Pastikan GPS/lokasi HP aktif.');
+      if (!pos) throw new Error(T('Lokasi tidak terdeteksi. Pastikan GPS/lokasi HP aktif.'));
       const lat = pos.coords.latitude; const lon = pos.coords.longitude;
       lastFix.current = { lat, lon, at: Date.now() };
       const prev = prefsRef.current?.sholat.koordinat;
@@ -247,7 +248,7 @@ export function SholatProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (e: any) {
-      setLocError(e.message || 'Gagal membaca lokasi.');
+      setLocError(e.message || T('Gagal membaca lokasi.'));
     } finally { setLocating(false); }
   }, [savePrefs, fetchJadwal]);
 
@@ -441,13 +442,13 @@ export function SholatProvider({ children }: { children: React.ReactNode }) {
         <View style={[st.banner, { top: insets.top + 8 }]} accessibilityRole="alert">
           <Ionicons name="moon" size={24} color="#fff" />
           <View style={{ flex: 1 }}>
-            <Text style={st.title}>{banner.test ? 'Uji suara adzan' : `Waktu ${namaWaktu[banner.key]} telah tiba`}</Text>
+            <Text style={st.title}>{banner.test ? T('Uji suara adzan') : T('Waktu {w} telah tiba', { w: T(namaWaktu[banner.key]) })}</Text>
             <Text style={st.sub} numberOfLines={1}>
-              {banner.test ? 'Begini adzan akan terdengar saat masuk waktu sholat.' : `${fmtJam(banner.jam)} ${jadwal?.zona || ''} · ${titleCase(jadwal?.lokasi)}`}
+              {banner.test ? T('Begini adzan akan terdengar saat masuk waktu sholat.') : `${fmtJam(banner.jam)} ${jadwal?.zona || ''} · ${titleCase(jadwal?.lokasi)}`}
             </Text>
           </View>
           <Pressable onPress={playing ? stopAdzan : () => setBanner(null)} style={st.btn}>
-            <Text style={st.btnText}>{playing ? 'Hentikan' : 'Tutup'}</Text>
+            <Text style={st.btnText}>{playing ? T('Hentikan') : T('Tutup')}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -455,7 +456,7 @@ export function SholatProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-const st = StyleSheet.create({
+const st = themed(() => StyleSheet.create({
   banner: {
     position: 'absolute', left: 12, right: 12, zIndex: 100, elevation: 12, flexDirection: 'row', alignItems: 'center', gap: 12,
     padding: 14, borderRadius: 18, backgroundColor: C.accent, shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 6 },
@@ -464,4 +465,4 @@ const st = StyleSheet.create({
   sub: { color: 'rgba(255,255,255,.85)', fontSize: 13, marginTop: 2 },
   btn: { backgroundColor: 'rgba(255,255,255,.22)', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
   btnText: { color: '#fff', fontWeight: '800' },
-});
+}));

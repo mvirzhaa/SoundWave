@@ -1,287 +1,311 @@
-/** Tab Cari: cari YouTube, pratinjau, konversi MP3/MP4, unduh ke HP atau simpan ke Google Drive. */
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Keyboard, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Image } from 'expo-image';
+/**
+ * Tab Pustaka. Sumber: Semua / Google Drive / HP (penyimpanan lokal).
+ * Tab: Lagu / Playlist / Artis / Genre. Mode offline (unduhan Drive), acak semua.
+ */
+import React, { useCallback, useMemo, useState } from 'react';
+import { T } from '../../lib/i18n';
+import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { WebView } from 'react-native-webview';
-import { router } from 'expo-router';
-import * as Sharing from 'expo-sharing';
-import { File, Paths } from 'expo-file-system';
-import { embedUrl, get, jobFileUrl, post } from '../../lib/api';
+import { router, useFocusEffect } from 'expo-router';
+import { get, post } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useLibrary } from '../../lib/library';
 import { usePlayer } from '../../lib/player';
 import { useUi } from '../../lib/ui';
-import { Button, Chip } from '../../components/Common';
-import { C, fmtDur, fmtSize } from '../../lib/theme';
-import type { Job, SearchResult } from '../../lib/types';
+import { downloadOffline, isOffline, offlineTracks, removeOffline } from '../../lib/offline';
+import { TrackRow } from '../../components/TrackRow';
+import { useTrackMenu } from '../../components/TrackMenu';
+import { Collage, Cover } from '../../components/Cover';
+import { Button, Empty } from '../../components/Common';
+import { C, themed } from '../../lib/theme';
+import type { PlaylistSummary, Track } from '../../lib/types';
 
-const QUALITIES = { mp3: [128, 192, 256, 320], mp4: [360, 480, 720, 1080] } as const;
+type Tab = 'lagu' | 'playlist' | 'artis' | 'genre';
+type Source = 'semua' | 'drive' | 'hp';
+const TABS: [Tab, string][] = [['lagu', 'Lagu'], ['playlist', 'Playlist'], ['artis', 'Artis'], ['genre', 'Genre']];
+const SOURCES: [Source, string, keyof typeof Ionicons.glyphMap][] = [['semua', 'Semua', 'albums-outline'], ['drive', 'Drive', 'logo-google'], ['hp', 'HP', 'phone-portrait-outline']];
+const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
+const addedAt = (t: Track & { createdTime?: string }) => (t.createdTime ? Date.parse(t.createdTime) : t.added || 0);
 
-export default function SearchScreen() {
-  const [q, setQ] = useState('');
-  const [sugg, setSugg] = useState<string[]>([]);
-  const [results, setResults] = useState<SearchResult[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState('');
-  const [open, setOpen] = useState<string | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const player = usePlayer();
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const abort = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
-    const term = q.trim();
-    if (term.length < 2 || /^https?:\/\//i.test(term)) { setSugg([]); return; }
-    timer.current = setTimeout(async () => {
-      abort.current?.abort();
-      abort.current = new AbortController();
-      try { setSugg(await get<string[]>(`/api/suggest?q=${encodeURIComponent(term)}`, { signal: abort.current.signal })); } catch { /* abaikan */ }
-    }, 200);
-  }, [q]);
-
-  const search = async (term: string) => {
-    if (!term.trim()) return;
-    Keyboard.dismiss();
-    setQ(term); setSugg([]); setErr(''); setLoading(true); setOpen(null); setPreview(null);
-    try {
-      const r = await get<{ results: SearchResult[] }>(`/api/search?q=${encodeURIComponent(term.trim())}`, { timeout: 45000 });
-      setResults(r.results);
-    } catch (e: any) { setErr(e.message); setResults(null); } finally { setLoading(false); }
-  };
-
-  return (
-    <View style={{ flex: 1 }}>
-      <View style={s.searchBox}>
-        <Ionicons name="search" size={20} color={C.muted} />
-        <TextInput style={s.input} value={q} onChangeText={setQ} placeholder="Judul lagu, artis, atau link YouTube"
-          placeholderTextColor={C.muted} returnKeyType="search" onSubmitEditing={() => search(q)} autoCorrect={false} />
-        {q ? <Pressable onPress={() => { setQ(''); setSugg([]); }} hitSlop={8}><Ionicons name="close-circle" size={20} color={C.muted} /></Pressable> : null}
-      </View>
-
-      {sugg.length ? (
-        <View style={s.sugg}>
-          {sugg.map((t) => (
-            <Pressable key={t} style={s.suggItem} onPress={() => search(t)}>
-              <Ionicons name="search-outline" size={16} color={C.muted} />
-              <Text style={s.suggText} numberOfLines={1}>{t}</Text>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
-
-      {loading ? <ActivityIndicator color={C.accent} style={{ marginTop: 32 }} /> : null}
-      {err ? <Text style={s.err}>{err}</Text> : null}
-      {!loading && !results && !err ? (
-        <View style={s.hero}>
-          <Text style={s.heroTitle}>Sound<Text style={{ color: C.accent }}>Wave</Text></Text>
-          <Text style={s.heroText}>Cari, dengarkan dulu, lalu unduh MP3 sampai 320 kbps atau MP4 sampai 1080p.</Text>
-          <Text style={s.legal}>Gunakan untuk konten milik Anda, berlisensi bebas, atau yang sudah mendapat izin.</Text>
-        </View>
-      ) : null}
-
-      {results && !loading ? (
-        <FlatList
-          data={results}
-          keyExtractor={(r) => r.id}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 24 }}
-          ListEmptyComponent={<Text style={s.err}>Tidak ada hasil.</Text>}
-          renderItem={({ item }) => (
-            <ResultCard item={item} open={open === item.id} previewing={preview === item.id}
-              onToggle={() => setOpen(open === item.id ? null : item.id)}
-              onPreview={() => {
-                const on = preview !== item.id;
-                setPreview(on ? item.id : null);
-                setOpen(item.id);
-                if (on) player.pause();
-              }} />
-          )}
-        />
-      ) : null}
-    </View>
-  );
-}
-
-function ResultCard({ item, open, previewing, onToggle, onPreview }: {
-  item: SearchResult; open: boolean; previewing: boolean; onToggle: () => void; onPreview: () => void;
-}) {
-  return (
-    <View style={[s.card, open && { borderColor: C.accent }]}>
-      <View style={s.cardRow}>
-        <Pressable onPress={onPreview} style={s.thumb}>
-          <Image source={{ uri: item.thumbnail }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-          {item.duration ? <Text style={s.dur}>{fmtDur(item.duration)}</Text> : null}
-        </Pressable>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={s.title} numberOfLines={2}>{item.title}</Text>
-          <Text style={s.sub} numberOfLines={1}>{item.channel}</Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-            <Pressable style={[s.smallBtn, previewing && { borderColor: C.accent }]} onPress={onPreview}>
-              <Ionicons name={previewing ? 'stop' : 'play'} size={14} color={previewing ? C.accent : C.text} />
-              <Text style={[s.smallBtnText, previewing && { color: C.accent }]}>{previewing ? 'Stop' : 'Putar'}</Text>
-            </Pressable>
-            <Pressable style={s.smallBtn} onPress={onToggle}>
-              <Ionicons name="download-outline" size={14} color={C.accent} />
-              <Text style={[s.smallBtnText, { color: C.accent }]}>Unduh</Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-      {previewing ? (
-        <View style={s.preview}>
-          <WebView source={{ uri: embedUrl(item.id) }} allowsInlineMediaPlayback mediaPlaybackRequiresUserAction={false}
-            allowsFullscreenVideo style={{ backgroundColor: '#000' }} />
-        </View>
-      ) : null}
-      {open ? <ConvertPanel item={item} /> : null}
-    </View>
-  );
-}
-
-function ConvertPanel({ item }: { item: SearchResult }) {
+export default function LibraryScreen() {
   const { user } = useAuth();
   const lib = useLibrary();
+  const player = usePlayer();
   const ui = useUi();
-  const [format, setFormat] = useState<'mp3' | 'mp4'>('mp3');
-  const [quality, setQuality] = useState<number>(320);
-  const [job, setJob] = useState<Job | null>(null);
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState<'' | 'convert' | 'drive' | 'device'>('');
-  const [driveLink, setDriveLink] = useState<string | null>(null);
-  const poll = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const menu = useTrackMenu();
+  const [tab, setTab] = useState<Tab>('lagu');
+  const [src, setSrc] = useState<Source>('semua');
+  const [filter, setFilter] = useState('');
+  const [offlineOnly, setOfflineOnly] = useState(false);
+  const [playlists, setPlaylists] = useState<{ special: PlaylistSummary[]; playlists: PlaylistSummary[] } | null>(null);
+  const { width } = useWindowDimensions();
 
-  useEffect(() => () => { if (poll.current) clearTimeout(poll.current); }, []);
-  const reset = () => { if (poll.current) clearTimeout(poll.current); setJob(null); setErr(''); setDriveLink(null); };
+  const loadPlaylists = useCallback(() => { get('/api/library/playlists').then(setPlaylists).catch(() => {}); }, []);
+  useFocusEffect(useCallback(() => { if (tab === 'playlist') loadPlaylists(); }, [tab, lib.playlistsVersion, loadPlaylists]));
 
-  const track = async (id: string) => {
-    try {
-      const j = await get<Job>(`/api/jobs/${id}`);
-      setJob(j);
-      if (j.status === 'error') setErr(j.error || 'Konversi gagal.');
-      else if (j.status !== 'done') poll.current = setTimeout(() => track(id), 1000);
-      else if (j.driveLink) setDriveLink(j.driveLink);
-    } catch (e: any) { setErr(e.message); }
+  const d = user?.drive;
+  const driveReady = Boolean(d?.ready ?? (d?.connected && d?.folderId));
+  const hasLocalSetup = lib.localSettings.device || lib.localSettings.folders.length > 0 || lib.localTracks.length > 0;
+
+  /** Semua lagu dari sumber terpilih (sebelum filter). */
+  const base: Track[] = useMemo(() => {
+    const drive = offlineOnly ? offlineTracks() : driveReady ? lib.tracks || [] : [];
+    if (src === 'drive') return drive;
+    if (src === 'hp') return lib.localTracks;
+    return [...drive, ...lib.localTracks].sort((a, b) => addedAt(b) - addedAt(a));
+  }, [src, offlineOnly, driveReady, lib.tracks, lib.localTracks, lib.offlineVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const list = useMemo(() => {
+    const f = norm(filter);
+    return f ? base.filter((t) => norm(`${t.title} ${t.artist} ${t.album || ''} ${t.name}`).includes(f)) : base;
+  }, [base, filter]);
+
+  const groups = useMemo(() => {
+    if (tab !== 'artis' && tab !== 'genre') return [];
+    const key = tab === 'artis' ? 'artist' : 'genre';
+    const m = new Map<string, Track[]>();
+    base.forEach((t) => {
+      const k = (t[key] as string) || (key === 'genre' ? 'Tanpa genre' : 'Tidak diketahui');
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(t);
+    });
+    const f = norm(filter);
+    return [...m.entries()].filter(([k]) => !f || norm(k).includes(f)).sort((a, b) => a[0].localeCompare(b[0], 'id'));
+  }, [tab, base, filter]);
+
+  const toggleOffline = async (t: Track) => {
+    if (isOffline(t.id)) { removeOffline(t.id); ui.toast(T('Unduhan offline dihapus')); return; }
+    try { await downloadOffline(t); ui.toast(T('“{t}” tersedia offline', { t: t.title })); } catch (e: any) { ui.toast(T('Gagal mengunduh: {e}', { e: e.message }), true); }
   };
 
-  const convert = async () => {
-    reset(); setBusy('convert');
-    try {
-      const j = await post<Job>('/api/convert', { videoId: item.id, format, quality });
-      setJob(j);
-      if (j.status !== 'done') track(j.id); else if (j.driveLink) setDriveLink(j.driveLink);
-    } catch (e: any) { setErr(e.message); } finally { setBusy(''); }
-  };
+  /** Menu pengaturan sumber HP: pindai HP, tambah folder, impor file. */
+  const localMenu = () => ui.sheet({
+    title: T('Musik di HP'),
+    subtitle: `${lib.localTracks.length} lagu`,
+    items: [
+      Platform.OS === 'android' && {
+        label: lib.localSettings.device ? T('Berhenti memindai semua lagu di HP') : T('Pindai semua lagu di HP'),
+        icon: 'phone-portrait-outline',
+        onPress: () => lib.setDeviceScan(!lib.localSettings.device).catch((e) => ui.toast(e.message, true)),
+      },
+      { label: T('Tambah folder musik…'), icon: 'folder-open-outline', onPress: () => lib.addFolder().catch((e) => ui.toast(e.message, true)) },
+      { label: T('Impor file audio…'), icon: 'document-attach-outline', onPress: async () => {
+        try { const n = await lib.importLocal(); if (n) ui.toast(T('{n} file diimpor', { n })); } catch (e: any) { ui.toast(e.message, true); }
+      } },
+      ...lib.localSettings.folders.map((f) => ({ label: T('Hapus folder: {f}', { f: f.name }), icon: 'remove-circle-outline' as const, onPress: () => lib.removeFolder(f.uri) })),
+      { label: T('Pindai ulang'), icon: 'refresh', onPress: () => lib.scanLocal() },
+    ],
+  });
 
-  const saveDrive = async () => {
-    if (!job) return;
-    setBusy('drive');
-    try {
-      const r = await post<{ link: string }>(`/api/jobs/${job.id}/drive`);
-      setDriveLink(r.link);
-      ui.toast('Tersimpan ke Google Drive');
-      lib.load(true);
-    } catch (e: any) { ui.toast(e.message, true); } finally { setBusy(''); }
-  };
+  /* ---------- Kepala halaman ---------- */
+  const sourceStatus = (() => {
+    const items: React.ReactNode[] = [];
+    if (src !== 'hp' && (d?.configured || d?.linkAvailable) && !driveReady) {
+      items.push(
+        <Pressable key="drive" style={s.notice} onPress={() => router.push('/account')}>
+          <Ionicons name="cloud-outline" size={18} color={C.warn} />
+          <Text style={s.noticeText}>{d.connected ? T('Folder Google Drive belum diatur.') : T('Google Drive belum dihubungkan.')}</Text>
+          <Text style={s.link}>{d.connected ? T('Atur') : T('Hubungkan')}</Text>
+        </Pressable>,
+      );
+    }
+    if (src !== 'drive') {
+      if (!hasLocalSetup) {
+        items.push(
+          <View key="local" style={[s.localCard, src === 'hp' && s.localBig]}>
+            <Ionicons name="phone-portrait-outline" size={src === 'hp' ? 34 : 20} color={C.accent} />
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={s.localTitle}>{T('Putar musik dari penyimpanan HP')}</Text>
+              {src === 'hp' ? <Text style={s.muted}>{T('File tetap di HP — tidak diunggah. Judul, artis, album, genre, dan sampul dibaca dari tag MP3.')}</Text> : null}
+            </View>
+            {src === 'hp' ? (
+              <View style={{ gap: 8, alignSelf: 'stretch' }}>
+                {Platform.OS === 'android' ? <Button label={T("Pindai semua lagu di HP")} icon="search" onPress={() => lib.setDeviceScan(true).catch((e) => ui.toast(e.message, true))} /> : null}
+                <Button label={T("Pilih folder musik")} icon="folder-open-outline" kind="ghost" onPress={() => lib.addFolder().catch((e) => ui.toast(e.message, true))} />
+                <Button label={T("Impor file audio")} icon="document-attach-outline" kind="ghost" onPress={async () => { try { const n = await lib.importLocal(); if (n) ui.toast(T('{n} file diimpor', { n })); } catch (e: any) { ui.toast(e.message, true); } }} />
+                {Platform.OS === 'ios' ? <Text style={s.hint}>{T('Di iPhone, lagu dari aplikasi Musik (Apple Music) tidak bisa diakses aplikasi lain. Gunakan folder di app File atau impor file.')}</Text> : null}
+              </View>
+            ) : <Pressable onPress={localMenu} hitSlop={8}><Text style={s.link}>{T('Tambah')}</Text></Pressable>}
+          </View>,
+        );
+      } else {
+        items.push(
+          <Pressable key="local" style={s.notice} onPress={localMenu}>
+            {lib.localScan.busy ? <ActivityIndicator size="small" color={C.accent} /> : <Ionicons name="phone-portrait-outline" size={18} color={C.accent} />}
+            <Text style={s.noticeText} numberOfLines={1}>
+              {lib.localScan.busy ? T('Memindai HP… {n} lagu', { n: lib.localScan.done }) : `${T('HP: {n} lagu', { n: lib.localTracks.length })}${lib.localSettings.folders.length ? ` · ${lib.localSettings.folders.length} folder` : ''}`}
+            </Text>
+            <Ionicons name="settings-outline" size={18} color={C.muted} />
+          </Pressable>,
+        );
+        lib.localScan.errors.forEach((e, i) => items.push(<Text key={`e${i}`} style={[s.banner, { color: C.danger }]}>{e}</Text>));
+      }
+    }
+    return items;
+  })();
 
-  const saveDevice = async () => {
-    if (!job?.filename) return;
-    setBusy('device');
-    try {
-      const safe = job.filename.replace(/[\\/:*?"<>|]/g, '_');
-      const dest = new File(Paths.cache, safe);
-      const file = await File.downloadFileAsync(await jobFileUrl(job.id), dest, { idempotent: true });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(file.uri, { mimeType: format === 'mp3' ? 'audio/mpeg' : 'video/mp4', dialogTitle: 'Simpan file', UTI: format === 'mp3' ? 'public.mp3' : 'public.mpeg-4' });
-      } else ui.toast(`Tersimpan: ${file.uri}`);
-    } catch (e: any) { ui.toast(`Gagal mengunduh: ${e.message}`, true); } finally { setBusy(''); }
-  };
-
-  const driveReady = user?.drive.connected && user?.drive.folderId;
-  const done = job?.status === 'done';
-  const running = job && (job.status === 'queued' || job.status === 'running');
-
-  return (
-    <View style={s.panel}>
-      <View style={s.seg}>
-        {(['mp3', 'mp4'] as const).map((f) => (
-          <Pressable key={f} onPress={() => { setFormat(f); setQuality(f === 'mp3' ? 320 : 720); reset(); }} style={[s.segBtn, format === f && s.segOn]}>
-            <Text style={[s.segText, format === f && { color: C.text }]}>{f === 'mp3' ? 'MP3 · Audio' : 'MP4 · Video'}</Text>
+  const header = (
+    <View>
+      <View style={s.sources}>
+        {SOURCES.map(([k, label, icon]) => (
+          <Pressable key={k} onPress={() => setSrc(k)} style={[s.srcChip, src === k && s.srcOn]}>
+            <Ionicons name={icon} size={14} color={src === k ? C.accent : C.muted} />
+            <Text style={[s.srcText, src === k && { color: C.accent }]}>{T(label)}</Text>
           </Pressable>
         ))}
       </View>
-      <View style={s.qualities}>
-        {QUALITIES[format].map((v) => (
-          <Chip key={v} active={quality === v} label={format === 'mp3' ? `${v} kbps` : `${v}p`} onPress={() => { setQuality(v); reset(); }} />
+      {sourceStatus}
+      <View style={s.tabs}>
+        {TABS.map(([k, label]) => (
+          <Pressable key={k} onPress={() => setTab(k)} style={[s.tab, tab === k && s.tabOn]}>
+            <Text style={[s.tabText, tab === k && { color: C.accent }]}>{T(label)}</Text>
+          </Pressable>
         ))}
       </View>
+      <View style={s.tools}>
+        <View style={s.filter}>
+          <Ionicons name="search" size={16} color={C.muted} />
+          <TextInput value={filter} onChangeText={setFilter} placeholder={tab === 'playlist' ? T('Cari playlist…') : T('Cari judul, artis, album…')}
+            placeholderTextColor={C.muted} style={s.filterInput} />
+        </View>
+        {tab !== 'playlist' && src !== 'hp' && driveReady ? (
+          <Pressable onPress={() => setOfflineOnly((v) => !v)} style={[s.offBtn, offlineOnly && { borderColor: C.ok }]} accessibilityLabel={T("Mode offline Drive")}>
+            <Ionicons name={offlineOnly ? 'cloud-done' : 'cloud-download-outline'} size={20} color={offlineOnly ? C.ok : C.muted} />
+          </Pressable>
+        ) : null}
+      </View>
+      {lib.usingOffline && src !== 'hp' ? <Text style={s.banner}>{T('Server tidak terjangkau — lagu Drive diambil dari unduhan offline.')}</Text> : null}
+      {offlineOnly && src !== 'hp' ? <Text style={s.banner}>{T('Mode offline: lagu Drive yang sudah diunduh ke HP.')}</Text> : null}
+      {lib.error && src !== 'hp' ? <Text style={[s.banner, { color: C.danger }]}>{lib.error}</Text> : null}
+    </View>
+  );
 
-      {!job || job.status === 'error' ? <Button label={job ? 'Coba lagi' : 'Konversi'} onPress={convert} loading={busy === 'convert'} /> : null}
-      {running ? (
-        <View style={{ width: '100%', gap: 6 }}>
-          <View style={s.bar}><View style={[s.barFill, { width: `${Math.max(3, job!.progress)}%` }]} /></View>
-          <Text style={s.stage}>{job!.stage} · {job!.progress}%</Text>
+  const refreshing = lib.loading || lib.localScan.busy;
+  const refresh = (
+    <RefreshControl refreshing={refreshing} tintColor={C.accent} colors={[C.accent]} onRefresh={() => {
+      if (src !== 'hp' && driveReady) lib.load(true);
+      if (src !== 'drive' && hasLocalSetup) lib.scanLocal();
+      if (tab === 'playlist') loadPlaylists();
+    }} />
+  );
+
+  /* ---- Tab Playlist ---- */
+  if (tab === 'playlist') {
+    const col = Math.max(2, Math.floor((width - 28) / 170));
+    const size = (width - 28 - (col - 1) * 14) / col;
+    const f = norm(filter);
+    const all = playlists ? [...playlists.special, ...playlists.playlists].filter((p) => !f || norm(p.name).includes(f)) : [];
+    const createPl = async () => {
+      const name = await ui.prompt({ title: T('Playlist baru'), placeholder: T('Nama playlist'), ok: T('Buat') });
+      if (!name) return;
+      try { const p = await post<{ id: number }>('/api/library/playlists', { name }); lib.bumpPlaylists(); router.push(`/playlist/${p.id}`); } catch (e: any) { ui.toast(e.message, true); }
+    };
+    return (
+      <ScrollView refreshControl={refresh} contentContainerStyle={{ paddingBottom: 24 }}>
+        {header}
+        <View style={[s.grid, { gap: 14 }]}>
+          <Pressable onPress={createPl} style={{ width: size }}>
+            <View style={[s.newPl, { width: size, height: size }]}><Ionicons name="add" size={44} color={C.accent} /></View>
+            <Text style={s.plName}>{T('Playlist baru')}</Text>
+          </Pressable>
+          {all.map((p) => (
+            <Pressable key={String(p.id)} style={{ width: size }} onPress={() => router.push(p.quran ? '/quran' : `/playlist/${p.id}`)}>
+              {p.quran ? <Cover quran="القرآن" size={size} radius={14} />
+                : <Collage ids={p.covers} size={size} icon={p.id === 'favorites' ? 'heart' : p.id === 'recent' ? 'time-outline' : 'musical-notes'} />}
+              <Text style={s.plName} numberOfLines={1}>{p.name}</Text>
+              <Text style={s.plCount}>{p.count} {p.quran ? 'surat' : 'lagu'}</Text>
+            </Pressable>
+          ))}
         </View>
-      ) : null}
-      {done ? (
-        <View style={{ width: '100%', gap: 10, alignItems: 'center' }}>
-          <Text style={s.ready}>File siap!</Text>
-          <Text style={s.stage} numberOfLines={1}>{job!.filename} · {fmtSize(job!.size)}</Text>
-          <Button label="Unduh ke HP" icon="phone-portrait-outline" onPress={saveDevice} loading={busy === 'device'} style={{ alignSelf: 'stretch' }} />
-          {driveLink ? (
-            <View style={{ alignItems: 'center', gap: 4 }}>
-              <Text style={{ color: C.ok, fontWeight: '600' }}>Tersimpan di Google Drive</Text>
-              <View style={{ flexDirection: 'row', gap: 16 }}>
-                <Text style={s.link} onPress={() => Linking.openURL(driveLink)}>Buka di Drive</Text>
-                <Text style={s.link} onPress={() => router.push('/library')}>Lihat di Pustaka</Text>
-              </View>
+      </ScrollView>
+    );
+  }
+
+  const emptyText = src === 'hp'
+    ? (hasLocalSetup ? T('Tidak ada lagu ditemukan. Tarik ke bawah untuk memindai ulang.') : undefined)
+    : T('Unduh lagu dari tab Cari lalu simpan ke Google Drive, atau tambahkan musik dari HP.');
+  const empty = (lib.tracks === null && src !== 'hp' && driveReady) || (src === 'hp' && !hasLocalSetup)
+    ? undefined
+    : <Empty title={offlineOnly ? T('Belum ada lagu offline') : T('Belum ada lagu')} text={emptyText} />;
+
+  /* ---- Tab Artis / Genre ---- */
+  if (tab === 'artis' || tab === 'genre') {
+    return (
+      <FlatList data={groups} keyExtractor={([k]) => k} refreshControl={refresh} ListHeaderComponent={header}
+        contentContainerStyle={{ paddingBottom: 24 }}
+        ListEmptyComponent={empty}
+        ListFooterComponent={tab === 'genre' && groups.some(([k]) => k === 'Tanpa genre')
+          ? <Text style={s.hint}>{T('Genre lagu Drive diisi otomatis oleh server; lagu HP memakai tag genre di file. Ubah lewat menu ⋮ pada lagu.')}</Text> : undefined}
+        renderItem={({ item: [name, items] }) => (
+          <Pressable style={s.group} onPress={() => router.push({ pathname: '/group/[kind]/[name]', params: { kind: tab, name } })}>
+            <Collage ids={items.map((t) => t.ytId).filter(Boolean) as string[]} size={52} radius={tab === 'artis' ? 26 : 10} icon={tab === 'artis' ? 'person' : 'pricetag'} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.groupName} numberOfLines={1}>{name}</Text>
+              <Text style={s.plCount}>{items.length} lagu</Text>
             </View>
-          ) : driveReady ? (
-            <Button label="Simpan ke Google Drive" icon="cloud-upload-outline" kind="ghost" onPress={saveDrive} loading={busy === 'drive'} style={{ alignSelf: 'stretch' }} />
-          ) : user?.drive.configured ? (
-            <Text style={s.stage}>
-              {user.drive.connected ? 'Atur folder Drive di ' : 'Hubungkan Google Drive di '}
-              <Text style={s.link} onPress={() => router.push('/account')}>tab Akun</Text> untuk menyimpan ke Drive.
-            </Text>
-          ) : null}
-        </View>
+            <Ionicons name="chevron-forward" size={18} color={C.muted} />
+          </Pressable>
+        )} />
+    );
+  }
+
+  /* ---- Tab Lagu ---- */
+  return (
+    <View style={{ flex: 1 }}>
+      <FlatList
+        data={list}
+        keyExtractor={(t) => t.id}
+        refreshControl={refresh}
+        ListHeaderComponent={<>{header}{list.length ? <Text style={s.count}>{list.length} lagu</Text> : null}</>}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        initialNumToRender={20}
+        windowSize={11}
+        ListEmptyComponent={empty}
+        renderItem={({ item, index }) => (
+          <TrackRow track={item} active={player.current?.id === item.id} favorite={lib.favorites.has(item.id)} showSource={src === 'semua'}
+            onPress={() => player.playList(list, index, { source: src === 'hp' ? 'Musik di HP' : offlineOnly ? T('Offline') : T('Semua lagu') })}
+            onMore={() => menu.open(item, { list, index })}
+            onOffline={item.local ? undefined : () => toggleOffline(item)} />
+        )}
+        extraData={`${player.current?.id}-${lib.offlineVersion}-${lib.favorites.size}`}
+      />
+      {list.length ? (
+        <Pressable style={s.fab} onPress={() => player.playList(list, null, { shuffle: true, source: 'Acak semua' })} accessibilityLabel={T("Putar acak")}>
+          <Ionicons name="shuffle" size={26} color="#fff" />
+        </Pressable>
       ) : null}
-      {err ? <Text style={s.errSmall}>{err}</Text> : null}
     </View>
   );
 }
 
-const s = StyleSheet.create({
-  searchBox: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 14, marginTop: 4, marginBottom: 8, paddingHorizontal: 14, borderRadius: 999, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
-  input: { flex: 1, color: C.text, fontSize: 16, paddingVertical: 12 },
-  sugg: { marginHorizontal: 14, backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, borderColor: C.border, paddingVertical: 4, marginBottom: 8 },
-  suggItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
-  suggText: { color: C.text, fontSize: 15, flex: 1 },
-  hero: { alignItems: 'center', padding: 32, gap: 10 },
-  heroTitle: { color: C.text, fontSize: 40, fontWeight: '800', letterSpacing: -1 },
-  heroText: { color: C.muted, textAlign: 'center', lineHeight: 21 },
-  legal: { color: C.muted, fontSize: 12, textAlign: 'center', marginTop: 12, opacity: 0.8 },
-  err: { color: C.danger, textAlign: 'center', padding: 24 },
-  errSmall: { color: C.danger, textAlign: 'center' },
-  card: { marginHorizontal: 14, marginBottom: 12, backgroundColor: C.surface, borderRadius: 16, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
-  cardRow: { flexDirection: 'row', gap: 12, padding: 12 },
-  thumb: { width: 128, aspectRatio: 16 / 9, borderRadius: 10, overflow: 'hidden', backgroundColor: C.surface2 },
-  dur: { position: 'absolute', right: 4, bottom: 4, backgroundColor: 'rgba(0,0,0,.75)', color: '#fff', fontSize: 11, fontWeight: '700', paddingHorizontal: 5, borderRadius: 5, overflow: 'hidden' },
-  title: { color: C.text, fontWeight: '700', fontSize: 15, lineHeight: 20 },
-  sub: { color: C.muted, fontSize: 13, marginTop: 2 },
-  smallBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface2 },
-  smallBtnText: { color: C.text, fontWeight: '600', fontSize: 13 },
-  preview: { aspectRatio: 16 / 9, backgroundColor: '#000' },
-  panel: { borderTopWidth: 1, borderTopColor: C.border, padding: 14, gap: 12, alignItems: 'center', backgroundColor: '#0d1330' },
-  seg: { flexDirection: 'row', backgroundColor: C.surface2, borderRadius: 999, padding: 4 },
-  segBtn: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 999 },
-  segOn: { backgroundColor: C.surface },
-  segText: { color: C.muted, fontWeight: '700', fontSize: 13 },
-  qualities: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
-  bar: { height: 8, borderRadius: 4, backgroundColor: C.surface2, overflow: 'hidden' },
-  barFill: { height: '100%', backgroundColor: C.accent },
-  stage: { color: C.muted, fontSize: 13, textAlign: 'center' },
-  ready: { color: C.text, fontWeight: '700', fontSize: 16 },
+const s = themed(() => StyleSheet.create({
+  sources: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingTop: 4, paddingBottom: 10 },
+  srcChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
+  srcOn: { borderColor: C.accent, backgroundColor: 'rgba(139,109,255,.14)' },
+  srcText: { color: C.muted, fontWeight: '700', fontSize: 14 },
+  notice: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 14, marginBottom: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  noticeText: { color: C.text, flex: 1, fontSize: 14 },
+  localCard: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 14, marginBottom: 8, padding: 14, borderRadius: 14, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  localBig: { flexDirection: 'column', alignItems: 'center', padding: 22 },
+  localTitle: { color: C.text, fontWeight: '700', fontSize: 16, textAlign: 'center' },
+  muted: { color: C.muted, textAlign: 'center', lineHeight: 20 },
   link: { color: C.accent, fontWeight: '700' },
-});
+  tabs: { flexDirection: 'row', paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: C.border },
+  tab: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -1 },
+  tabOn: { borderBottomColor: C.accent },
+  tabText: { color: C.muted, fontWeight: '700', fontSize: 15 },
+  tools: { flexDirection: 'row', gap: 10, padding: 14, paddingBottom: 6 },
+  filter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  filterInput: { flex: 1, color: C.text, paddingVertical: 10, fontSize: 15 },
+  offBtn: { width: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 12, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
+  banner: { color: C.warn, fontSize: 13, paddingHorizontal: 16, paddingBottom: 6 },
+  count: { color: C.muted, fontSize: 13, paddingHorizontal: 16, paddingVertical: 4 },
+  hint: { color: C.muted, fontSize: 13, padding: 16, textAlign: 'center' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 14, paddingTop: 8 },
+  newPl: { borderRadius: 14, borderWidth: 2, borderStyle: 'dashed', borderColor: C.border, alignItems: 'center', justifyContent: 'center', backgroundColor: C.surface },
+  plName: { color: C.text, fontWeight: '700', fontSize: 15, marginTop: 8 },
+  plCount: { color: C.muted, fontSize: 13 },
+  group: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 8 },
+  groupName: { color: C.text, fontWeight: '600', fontSize: 16 },
+  fab: { position: 'absolute', right: 18, bottom: 18, width: 58, height: 58, borderRadius: 29, backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center', elevation: 6, shadowColor: C.accent, shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } },
+}));

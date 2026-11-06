@@ -41,6 +41,16 @@ r.put('/folder', A.requireAuth(), wrap(async (req, res) => {
   res.json({ user: A.publicUser(A.getUser.get(req.user.id)) });
 }));
 
+/** Mode link folder (tanpa login Google, hanya baca). Body: { folder } */
+r.put('/link', A.requireAuth(), wrap(async (req, res) => {
+  await D.setLinkFolder(req.user, req.body?.folder);
+  res.json({ user: A.publicUser(A.getUser.get(req.user.id)) });
+}));
+r.delete('/link', A.requireAuth(), (req, res) => {
+  D.clearLink(req.user);
+  res.json({ user: A.publicUser(A.getUser.get(req.user.id)) });
+});
+
 /** Buat folder baru di root My Drive dan jadikan folder penyimpanan. */
 r.post('/folder', A.requireAuth(), wrap(async (req, res) => {
   await D.createFolder(req.user, req.body?.name);

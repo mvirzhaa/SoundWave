@@ -94,6 +94,14 @@ CREATE TABLE IF NOT EXISTS recent_plays (
 );
 `);
 
+// Migrasi ringan: kolom baru pada tabel lama
+{
+  const cols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
+  // drive_mode: 'oauth' (login Google, baca+tulis) | 'link' (link folder publik + API key, hanya baca)
+  if (!cols.has('drive_mode')) db.exec('ALTER TABLE users ADD COLUMN drive_mode TEXT');
+}
+
+
 /** Jalankan fungsi dalam transaksi. */
 function tx(fn) {
   db.exec('BEGIN');

@@ -557,6 +557,42 @@ body.has-mini .toast { bottom: calc(var(--mini-h) + 24px); }
 .ayat .lat { margin: 0 0 4px; color: var(--accent-2); font-style: italic; font-size: 14px; line-height: 1.5; }
 .ayat .id { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
 
+/* ================= Akun: akordion & mode Drive ================= */
+.panel-card.acc { padding: 0; overflow: hidden; display: block; }
+.acc > summary { list-style: none; display: flex; align-items: center; gap: 12px; padding: 16px 18px; cursor: pointer; }
+.acc > summary::-webkit-details-marker { display: none; }
+.acc > summary > svg:last-child { width: 20px; height: 20px; color: var(--muted); transition: transform .2s; flex: none; }
+.acc[open] > summary > svg:last-child { transform: rotate(180deg); }
+.acc-ico { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); flex: none; }
+.acc-ico svg { width: 20px; height: 20px; }
+.acc-title { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.acc-title small { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acc-body { padding: 0 18px 18px; display: grid; gap: 12px; }
+.acc > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.drive-modes { display: grid; gap: 14px; }
+.mode-seg { display: grid; grid-template-columns: 1fr 1fr; border-radius: 16px; }
+.mode-seg button { display: grid; gap: 2px; justify-items: center; border-radius: 12px; padding: 10px 8px; position: relative; }
+.mode-seg button small { font-weight: 500; font-size: 12px; }
+.mode-seg button .dot { position: absolute; top: 8px; right: 10px; }
+.steps { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; display: grid; gap: 4px; }
+
+/* ================= Radio ================= */
+.radio h2 { margin: 0 0 12px; }
+.radio h3 { margin: 18px 4px 6px; font-size: 16px; }
+.radio-search { margin-bottom: 12px; }
+.radio-search .search-box input { border: 0; background: transparent; box-shadow: none; outline: none; padding-left: 0; }
+.station .track-main { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; background: none; border: 0; padding: 0; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.freq { margin-left: 8px; font-size: 11px; font-weight: 800; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); padding: 2px 7px; border-radius: 999px; vertical-align: 2px; }
+.cover.radio-cover { background: linear-gradient(135deg, #2563eb, #7c3aed); color: #fff; }
+.cover.radio-cover img { object-fit: contain; background: #fff; }
+.cover.radio-cover .qnum { font-size: 12px; }
+.cover.lg.radio-cover .qnum, .cover.xl.radio-cover .qnum { font-size: 44px; }
+.station .heart { color: var(--muted); }
+.station .heart[aria-pressed="true"] { color: var(--accent); }
+.station .heart[aria-pressed="true"] svg path { fill: currentColor; }
+.is-live .seek, .is-live #lyricsBtn { visibility: hidden; }
+.live-badge { display: inline-block; margin-left: 8px; font-size: 11px; font-weight: 800; letter-spacing: .06em; color: #fff; background: #ef4444; padding: 2px 7px; border-radius: 6px; vertical-align: 3px; }
+
 /* ================= HP ================= */
 @media (max-width: 720px) {
   :root { --nav-h: 64px; --mini-h: 64px; }

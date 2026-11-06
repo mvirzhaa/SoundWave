@@ -59,6 +59,7 @@ async function load(t, refresh = false) {
   const el = box();
   el.textContent = '';
   if (t.quran) return loadQuran(t, seq);
+  if (t.radio) { el.append(h('p.lyrics-msg', { text: 'Lirik tidak tersedia untuk siaran radio.' })); return; }
   el.append(h('p.lyrics-msg', { text: 'Mencari lirik…' }));
   // Tunggu durasi asli file (lebih akurat untuk pencocokan versi lagu di LRCLIB)
   if (!(media.duration > 0)) {

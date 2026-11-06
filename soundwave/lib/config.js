@@ -45,5 +45,7 @@ module.exports = {
   MOBILE_SCHEME: process.env.MOBILE_SCHEME || 'soundwave',
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
+  // API key Google (Drive API aktif) untuk mode "link folder" — membaca folder publik tanpa login Google
+  GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || '',
   GOOGLE_API_BASE: process.env.GOOGLE_API_BASE || 'https://www.googleapis.com', // bisa diarahkan ke mock saat pengujian
 };

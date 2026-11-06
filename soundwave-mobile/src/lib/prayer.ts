@@ -107,10 +107,15 @@ export function jarakKm(a: { lat: number; lon: number }, b: { lat: number; lon: 
 
 export const titleCase = (s?: string) => String(s || '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 
-export function formatTanggal(iso: string) {
+export function formatTanggal(iso: string, lang: 'id' | 'en' = 'id') {
   const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (lang === 'en') {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return `${days[dt.getUTCDay()]}, ${months[m - 1]} ${d}, ${y}`;
+  }
   const hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
   const bulan = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-  const dt = new Date(Date.UTC(y, m - 1, d));
   return `${hari[dt.getUTCDay()]}, ${d} ${bulan[m - 1]} ${y}`;
 }

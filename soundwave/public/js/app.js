@@ -8,6 +8,8 @@ import { renderSearch } from './views/search.js';
 import { renderLibrary, renderPlaylist, renderGroup, trackMenu } from './views/library.js';
 import { renderAccount } from './views/account.js';
 import { renderSholat } from './views/sholat.js';
+import { renderRadio } from './views/radio.js';
+import { loadRadioFav } from './radio.js';
 import { loadSholat, nextChipText } from './sholat.js';
 import { on as onEvent } from './store.js';
 import { openVoice } from './voice.js';
@@ -86,6 +88,7 @@ function enterApp(user) {
   restorePlayer();
   initLocal().catch(() => {});
   loadSholat();
+  loadRadioFav();
   loadLocalFavorites();
   route();
 }
@@ -104,11 +107,11 @@ onUnauthorized(() => { if (store.user) { store.user = null; resetPlayer(); showA
 let cleanup = null;
 function route() {
   if (!store.user) return;
-  const raw = location.hash.slice(1) || '/cari';
+  const raw = location.hash.slice(1) || '/pustaka';
   const [path, qs = ''] = raw.split('?');
   const params = new URLSearchParams(qs);
   const parts = path.split('/').filter(Boolean).map(decodeURIComponent);
-  const section = parts[0] || 'cari';
+  const section = parts[0] || 'pustaka';
 
   cleanup?.(); cleanup = null;
   closeFull();
@@ -126,6 +129,7 @@ function route() {
     case 'artis': case 'genre': r = renderGroup(view, section, parts[1] || ''); break;
     case 'akun': renderAccount(view, params, { logout }); break;
     case 'sholat': r = renderSholat(view); break;
+    case 'radio': r = renderRadio(view); break;
     default: renderSearch(view, params);
   }
   Promise.resolve(r).then((fn) => { if (typeof fn === 'function') cleanup = fn; });

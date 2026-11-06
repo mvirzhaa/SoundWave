@@ -26,8 +26,8 @@ app.use(helmet({
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
-      imgSrc: ["'self'", 'data:', 'blob:', 'https://i.ytimg.com'],
-      // https: untuk murottal Al-Qur'an yang di-stream langsung dari CDN equran.id
+      imgSrc: ["'self'", 'data:', 'blob:', 'https:'], // https: untuk logo stasiun radio
+      // https: untuk murottal Al-Qur'an dan radio streaming langsung dari CDN / remote host
       mediaSrc: ["'self'", 'blob:', 'https:'],
       frameSrc: ['https://www.youtube-nocookie.com', 'https://www.youtube.com'],
       connectSrc: ["'self'"],
@@ -53,6 +53,7 @@ apiRouter.use('/voice', require('./routes/voice'));
 apiRouter.use('/lyrics', require('./routes/lyrics'));
 apiRouter.use('/sholat', require('./routes/sholat'));
 apiRouter.use('/quran', require('./routes/quran'));
+apiRouter.use('/radio', require('./routes/radio'));
 apiRouter.use('/', require('./routes/media'));
 apiRouter.use((req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan.' }));
 

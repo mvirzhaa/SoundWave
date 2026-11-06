@@ -89,9 +89,16 @@ async function playlist({ qari, semua }) {
 async function ayatQueue(nomor, qari, ulang = 3, dari = 1, sampai = 9999) {
   const [s, list] = await Promise.all([detailSurat(nomor), daftarSurat()]);
   const q = qariList(list).find((x) => x.id === qari) || { id: qari, name: 'Murottal' };
-  const n = Math.max(1, Math.min(10, Number(ulang) || 1));
+  const n = Math.max(1, Math.min(40, Number(ulang) || 1));
+  // Batasi panjang antrean (mis. Al-Baqarah 286 ayat × 40) → potong rentang ayat, sisanya lanjut dari ayat berikutnya
+  const MAX_ITEMS = 2000;
+  const mulai = Math.max(1, Number(dari) || 1);
+  let akhir = Math.min(s.jumlahAyat || 9999, Number(sampai) || 9999);
+  const muat = Math.max(1, Math.floor(MAX_ITEMS / n));
+  const terpotong = akhir - mulai + 1 > muat;
+  if (terpotong) akhir = mulai + muat - 1;
   const items = [];
-  for (const a of s.ayat.filter((x) => x.nomorAyat >= dari && x.nomorAyat <= sampai)) {
+  for (const a of s.ayat.filter((x) => x.nomorAyat >= mulai && x.nomorAyat <= akhir)) {
     for (let k = 1; k <= n; k++) {
       items.push({
         id: `quran-${q.id}-${pad3(s.nomor)}-${pad3(a.nomorAyat)}`,
@@ -104,7 +111,7 @@ async function ayatQueue(nomor, qari, ulang = 3, dari = 1, sampai = 9999) {
       });
     }
   }
-  return { surat: { nomor: s.nomor, namaLatin: s.namaLatin, jumlahAyat: s.jumlahAyat }, items };
+  return { surat: { nomor: s.nomor, namaLatin: s.namaLatin, jumlahAyat: s.jumlahAyat }, ulang: n, dari: mulai, sampai: akhir, terpotong, items };
 }
 
 /** Cari surat dari ucapan ("al mulk", "yasin", "surat 36"). */

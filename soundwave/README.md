@@ -45,8 +45,11 @@ soundwave/
 - **Akun**: hubungkan Google Drive, tempel link folder (atau buat folder "SoundWave"), ganti sandi,
   keluar dari semua perangkat.
 - **Perintah suara** (ikon mikrofon; Chrome/Edge/Safari) — logika sama dengan aplikasi mobile.
+- **Menu**: Pustaka (halaman pertama) · Radio · Cari · Sholat · Akun. Bagian di halaman Akun berupa akordion.
+- **Radio**: cari stasiun atau frekuensi, stasiun populer Indonesia, favorit — lihat bagian Radio di bawah.
 - **Hapalan Quran** (playlist bawaan di Pustaka → Playlist): murottal Juz 30 + Al-Fatihah atau seluruh 114 surat,
-  6 pilihan qari, cari surat, dan menu ⋮ → **Hafalan per ayat** (tiap ayat diulang 1/3/5/7×).
+  6 pilihan qari, cari surat, dan menu ⋮ → **Ulangi / hafalan**: ulangi surat utuh, atau tiap ayat 3/7/11/20/40×
+  (antrean dibatasi 2.000 ayat; surat panjang dipotong per bagian).
   Tombol **Lirik** di pemutar menampilkan teks Arab, Latin, dan terjemahan Kemenag; ayat yang sedang diputar disorot.
 - **Sholat** (menu baru): **pilih wilayah secara manual** dari ±500 kabupaten/kota (data resmi Kemenag RI),
   hitung mundur ke waktu berikutnya, jadwal hari ini (Imsak–Isya), lonceng adzan per waktu, volume, jeda musik
@@ -99,6 +102,15 @@ API (gratis, tanpa key, 1 permintaan per 3 detik) berdasarkan artis + judul, lal
 Genre bisa diubah manual lewat menu ⋮ → **Ubah genre** (perubahan manual tidak ditimpa). Matikan pencarian
 otomatis dengan `GENRE_LOOKUP=false`.
 
+### Radio
+
+Menu **Radio** (web & HP) memakai direktori terbuka [Radio Browser](https://www.radio-browser.info):
+stasiun populer Indonesia, cari nama / kota / frekuensi ("101.1", "98,7"), filter Indonesia atau semua negara,
+dan favorit (tersimpan di akun). Radio Browser tidak punya kolom frekuensi, jadi frekuensi FM dibaca dari nama atau
+tag stasiun. Siaran diputar lewat internet, bukan tuner FM HP.
+Stream `http://` diteruskan lewat server (`/api/radio/stream/:id`) agar bisa diputar di halaman https; alamat ke
+jaringan privat ditolak, dan jumlah stream serentak dibatasi `RADIO_MAX_STREAMS` (default 20).
+
 ### Jadwal sholat & suara adzan
 
 - Jadwal resmi diambil dari **API MyQuran** (data Bimas Islam Kemenag RI) per kabupaten/kota, di-cache 7 hari.
@@ -132,6 +144,25 @@ Untuk diakses aplikasi mobile di HP saat development, jalankan server di laptop 
 lalu pakai IP laptop, mis. `http://192.168.1.10:3000` (izinkan port 3000 di Windows Firewall).
 
 ## Mengaktifkan Google Drive per pengguna
+
+Di menu **Akun → Google Drive** pengguna memilih salah satu dari dua mode:
+
+| Mode | Cara | Bisa | Butuh di server |
+|---|---|---|---|
+| **Link folder** | Tempel link folder yang dibagikan *"Siapa saja yang memiliki link"* | Memutar lagu dari folder | `GOOGLE_API_KEY` |
+| **Login Google** | Login akun Google sendiri, pilih/buat folder (boleh privat) | Memutar **dan** menyimpan hasil unduhan, hapus file | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` |
+
+Mode link tidak bisa menyimpan ke Drive karena Google tidak mengizinkan penulisan tanpa akun yang login, dan isi
+folder publik bisa dilihat siapa pun yang punya link-nya. Kedua mode boleh diaktifkan bersamaan.
+
+### Mode link folder (API key)
+
+1. https://console.cloud.google.com → project → **APIs & Services → Library** → aktifkan **Google Drive API**.
+2. **Credentials → Create credentials → API key**. Batasi key: *API restrictions* → hanya **Google Drive API**
+   (dan bila server punya IP tetap, *Application restrictions* → IP address).
+3. Isi `GOOGLE_API_KEY=` di `.env`, restart server.
+
+### Mode login Google (OAuth)
 
 Setiap pengguna menghubungkan **akun Google-nya sendiri** dan memilih **foldernya sendiri**; refresh token
 disimpan terenkripsi (AES-256-GCM) di database.
@@ -184,6 +215,10 @@ POST/PUT/PATCH/DELETE) atau `Authorization: Bearer <token>` (mobile). Streaming/
 | PUT/DELETE | `/api/library/favorites/:fileId` | favorit |
 | POST | `/api/voice` `{text}` | perintah suara |
 | GET | `/api/lyrics?title=&artist=&duration=&ytId=` | lirik tersinkron (LRCLIB → subtitle YouTube) |
+| PUT / DELETE | `/api/drive/link` `{folder}` | mode link folder (tanpa login Google, hanya baca) |
+| GET | `/api/radio?q=101.1&negara=ID` | cari stasiun (q kosong = populer; negara kosong = semua) |
+| GET · PUT · DELETE | `/api/radio/favorit` · `/favorit/:uuid` | favorit radio |
+| GET | `/api/radio/stream/:uuid` | proxy stream http (media token boleh) |
 | GET | `/api/library/playlists/quran?qari=05&semua=0` | playlist Hapalan Quran |
 | GET | `/api/quran/surat` · `/surat/:n` · `/hafalan/:n?qari=&ulang=3` | daftar surat · teks + audio · antrean per ayat |
 | GET | `/api/sholat/kota?q=` · `/kota/cocok?subregion=&city=` | cari kabupaten/kota · cocokkan hasil GPS |

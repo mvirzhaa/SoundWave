@@ -1,5 +1,6 @@
 /** Detail playlist (termasuk Favorit & Terakhir Diputar). */
 import React, { useCallback, useState } from 'react';
+import { T } from '../../lib/i18n';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -12,7 +13,7 @@ import { TrackRow } from '../../components/TrackRow';
 import { useTrackMenu } from '../../components/TrackMenu';
 import { Collage } from '../../components/Cover';
 import { Button, Empty } from '../../components/Common';
-import { C, fmtDur } from '../../lib/theme';
+import { C, fmtDur, themed } from '../../lib/theme';
 import type { PlaylistDetail } from '../../lib/types';
 
 export default function PlaylistScreen() {
@@ -47,19 +48,19 @@ export default function PlaylistScreen() {
   const plMenu = () => ui.sheet({
     title: p.name,
     items: [
-      { label: 'Simpan semua untuk offline', icon: 'download-outline', onPress: async () => {
+      { label: T('Simpan semua untuk offline'), icon: 'download-outline', onPress: async () => {
         const todo = playable.filter((t) => !t.local && !isOffline(t.id));
         ui.toast(`Mengunduh ${todo.length} lagu…`);
         for (const t of todo) { try { await downloadOffline(t); } catch { /* lanjut */ } }
-        ui.toast('Selesai mengunduh untuk offline');
+        ui.toast(T('Selesai mengunduh untuk offline'));
       } },
-      !p.special && { label: 'Ubah nama', icon: 'create-outline', onPress: async () => {
-        const name = await ui.prompt({ title: 'Ubah nama playlist', value: p.name });
+      !p.special && { label: T('Ubah nama'), icon: 'create-outline', onPress: async () => {
+        const name = await ui.prompt({ title: T('Ubah nama playlist'), value: p.name });
         if (!name) return;
         try { await patch(`/api/library/playlists/${p.id}`, { name }); lib.bumpPlaylists(); load(); } catch (e: any) { ui.toast(e.message, true); }
       } },
-      !p.special && { label: 'Hapus playlist', icon: 'trash-outline', danger: true, onPress: async () => {
-        if (!(await ui.confirm({ title: 'Hapus playlist?', message: `“${p.name}” akan dihapus. Lagu di Drive tidak ikut terhapus.`, ok: 'Hapus', danger: true }))) return;
+      !p.special && { label: T('Hapus playlist'), icon: 'trash-outline', danger: true, onPress: async () => {
+        if (!(await ui.confirm({ title: T('Hapus playlist?'), message: T('“{p}” akan dihapus. Lagu di Drive tidak ikut terhapus.', { p: p.name }), ok: T('Hapus'), danger: true }))) return;
         try { await del(`/api/library/playlists/${p.id}`); lib.bumpPlaylists(); router.back(); } catch (e: any) { ui.toast(e.message, true); }
       } },
     ],
@@ -79,17 +80,17 @@ export default function PlaylistScreen() {
           <View style={s.head}>
             <Collage ids={p.items.map((t) => t.ytId).filter(Boolean) as string[]} size={170} radius={18}
               icon={p.id === 'favorites' ? 'heart' : p.id === 'recent' ? 'time-outline' : 'musical-notes'} />
-            <Text style={s.eyebrow}>{p.special ? 'PLAYLIST OTOMATIS' : 'PLAYLIST'}</Text>
+            <Text style={s.eyebrow}>{p.special ? T('PLAYLIST OTOMATIS') : T('PLAYLIST')}</Text>
             <Text style={s.title}>{p.name}</Text>
-            <Text style={s.muted}>{p.items.length} lagu{total ? ` · ${fmtDur(total)}` : ''}</Text>
+            <Text style={s.muted}>{p.items.length} {T('lagu')}{total ? ` · ${fmtDur(total)}` : ''}</Text>
             {missingLocal ? <Text style={[s.muted, { textAlign: 'center', fontSize: 13 }]}>{missingLocal} lagu lokal tidak ditemukan di HP ini (mungkin disimpan dari perangkat lain).</Text> : null}
             <View style={s.actions}>
-              <Button label="Putar" icon="play" disabled={!playable.length} onPress={() => player.playList(p.items, 0, { shuffle: false, source: p.name })} style={{ flex: 1 }} />
-              <Button label="Acak" icon="shuffle" kind="ghost" disabled={!playable.length} onPress={() => player.playList(p.items, null, { shuffle: true, source: p.name })} style={{ flex: 1 }} />
+              <Button label={T("Putar")} icon="play" disabled={!playable.length} onPress={() => player.playList(p.items, 0, { shuffle: false, source: p.name })} style={{ flex: 1 }} />
+              <Button label={T("Acak")} icon="shuffle" kind="ghost" disabled={!playable.length} onPress={() => player.playList(p.items, null, { shuffle: true, source: p.name })} style={{ flex: 1 }} />
             </View>
           </View>
         }
-        ListEmptyComponent={<Empty title="Playlist masih kosong" text={p.special ? undefined : 'Tambahkan lagu lewat menu ⋮ di Pustaka, atau ucapkan “masukkan lagu … ke playlist …”.'} />}
+        ListEmptyComponent={<Empty title={T("Playlist masih kosong")} text={p.special ? undefined : T('Tambahkan lagu lewat menu ⋮ di Pustaka, atau ucapkan “masukkan lagu … ke playlist …”.')} />}
         renderItem={({ item, index }) => (
           <TrackRow track={item} active={player.current?.id === item.id} favorite={lib.favorites.has(item.id)} showSource
             onPress={() => player.playList(p.items, index, { source: p.name })}
@@ -101,10 +102,10 @@ export default function PlaylistScreen() {
   );
 }
 
-const s = StyleSheet.create({
+const s = themed(() => StyleSheet.create({
   head: { alignItems: 'center', padding: 16, gap: 6 },
   eyebrow: { color: C.muted, fontSize: 11, fontWeight: '800', letterSpacing: 1.2, marginTop: 10 },
   title: { color: C.text, fontSize: 28, fontWeight: '800', textAlign: 'center' },
   muted: { color: C.muted },
   actions: { flexDirection: 'row', gap: 10, alignSelf: 'stretch', marginTop: 10 },
-});
+}));

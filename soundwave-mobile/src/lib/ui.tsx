@@ -1,9 +1,10 @@
 /** Host UI global: menu aksi (bottom sheet), dialog input, konfirmasi, dan toast. */
 import React, { createContext, useContext, useRef, useState } from 'react';
+import { T } from './i18n';
 import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C } from './theme';
+import { C, themed } from './theme';
 
 export type SheetItem = { label: string; icon?: keyof typeof Ionicons.glyphMap; danger?: boolean; onPress: () => void };
 type SheetOpts = { title?: string; subtitle?: string; header?: React.ReactNode; items: (SheetItem | false | null | undefined)[] };
@@ -85,9 +86,9 @@ export function UiProvider({ children }: { children: React.ReactNode }) {
             <TextInput style={s.input} value={promptVal} onChangeText={setPromptVal} placeholder={promptOpts?.placeholder}
               placeholderTextColor={C.muted} autoFocus maxLength={100} onSubmitEditing={() => promptVal.trim() && closePrompt(promptVal.trim())} />
             <View style={s.dialogActions}>
-              <Pressable style={s.btn} onPress={() => closePrompt(null)}><Text style={s.btnText}>Batal</Text></Pressable>
+              <Pressable style={s.btn} onPress={() => closePrompt(null)}><Text style={s.btnText}>{T('Batal')}</Text></Pressable>
               <Pressable style={[s.btn, s.btnPrimary]} onPress={() => promptVal.trim() && closePrompt(promptVal.trim())}>
-                <Text style={[s.btnText, { color: '#fff' }]}>{promptOpts?.ok || 'Simpan'}</Text>
+                <Text style={[s.btnText, { color: '#fff' }]}>{promptOpts?.ok || T('Simpan')}</Text>
               </Pressable>
             </View>
           </View>
@@ -101,9 +102,9 @@ export function UiProvider({ children }: { children: React.ReactNode }) {
             <Text style={s.dialogTitle}>{confirmOpts?.title}</Text>
             {confirmOpts?.message ? <Text style={s.muted}>{confirmOpts.message}</Text> : null}
             <View style={s.dialogActions}>
-              <Pressable style={s.btn} onPress={() => closeConfirm(false)}><Text style={s.btnText}>Batal</Text></Pressable>
+              <Pressable style={s.btn} onPress={() => closeConfirm(false)}><Text style={s.btnText}>{T('Batal')}</Text></Pressable>
               <Pressable style={[s.btn, confirmOpts?.danger ? { backgroundColor: C.danger } : s.btnPrimary]} onPress={() => closeConfirm(true)}>
-                <Text style={[s.btnText, { color: '#fff' }]}>{confirmOpts?.ok || 'Ya'}</Text>
+                <Text style={[s.btnText, { color: '#fff' }]}>{confirmOpts?.ok || T('Ya')}</Text>
               </Pressable>
             </View>
           </View>
@@ -122,7 +123,7 @@ export function UiProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-const s = StyleSheet.create({
+const s = themed(() => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(3,5,15,.6)' },
   sheet: { backgroundColor: C.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 8, paddingTop: 8, borderWidth: 1, borderColor: C.border },
   grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: C.border, marginBottom: 8 },
@@ -141,4 +142,4 @@ const s = StyleSheet.create({
   btnText: { color: C.text, fontWeight: '700', fontSize: 15 },
   toast: { position: 'absolute', left: 20, right: 20, backgroundColor: C.text, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12 },
   toastText: { color: C.bg, fontWeight: '600', fontSize: 14, textAlign: 'center' },
-});
+}));

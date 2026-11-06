@@ -3,10 +3,11 @@
  * Media Session (tombol media keyboard / layar kunci HP), dan simpan sesi terakhir.
  */
 import { h, icon, I, fillCover, fmtDur, toast, actionMenu } from './ui.js';
-import { apiUrl } from './api.js';
 import { store, on, emit, toggleFavorite, recordPlay } from './store.js';
 import { getLocalFile, coverUrl, localById } from './local.js';
 import { initLyrics } from './lyrics.js';
+import { isFavRadio, toggleRadioFav } from './radio.js';
+import { apiUrl } from './api.js';
 
 const $ = (id) => document.getElementById(id);
 const media = $('media');
@@ -64,9 +65,11 @@ export function playList(tracks, index = 0, opts = {}) {
   const wanted = index == null ? null : tracks[index];
   const list = tracks.filter((t) => t && t.available !== false);
   if (!list.length) { toast('Tidak ada lagu yang bisa diputar.'); return; }
+  failStreak = 0; // pilihan baru dari pengguna → hitung ulang kegagalan
   state.original = [...list];
   state.source = opts.source || 'Pustaka';
   if (opts.shuffle != null) state.shuffle = opts.shuffle;
+  if (opts.repeat) state.repeat = opts.repeat;
   const startIdx = wanted == null ? Math.floor(Math.random() * list.length) : Math.max(0, list.indexOf(wanted));
   state.queue = state.shuffle ? [list[startIdx], ...shuffleArr(list.filter((_, i) => i !== startIdx))] : [...list];
   state.index = state.shuffle ? 0 : startIdx;
@@ -90,13 +93,19 @@ export function addToQueue(track) {
 }
 
 let blobUrl = null;
-/** URL sumber: stream dari server (Google Drive) atau blob dari file lokal. */
+/** URL sumber: stream dari server (Google Drive), CDN murottal / radio, atau blob dari file lokal. */
 async function sourceUrl(t) {
-  if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null; }
-  if (t.url && String(t.id).startsWith('quran-')) return t.url; // murottal dari CDN equran.id
+  if (t.url && /^(quran|radio)-/.test(String(t.id))) return t.url;
   if (!t.local) return apiUrl(`/api/library/stream/${encodeURIComponent(t.id)}`);
-  blobUrl = URL.createObjectURL(await getLocalFile(t.id));
-  return blobUrl;
+  return URL.createObjectURL(await getLocalFile(t.id));
+}
+/** Pasang sumber baru; blob lama baru dilepas SETELAH sumber baru terpasang (bila dilepas lebih dulu,
+ *  browser melapor error untuk lagu lama dan pemutar ikut melompati lagu yang baru dipilih). */
+function setSource(src) {
+  const old = blobUrl;
+  blobUrl = src.startsWith('blob:') ? src : null;
+  media.src = src;
+  if (old && old !== src) setTimeout(() => URL.revokeObjectURL(old), 1000);
 }
 
 let lastRecorded = null;
@@ -114,10 +123,12 @@ async function load(autoplay = true, startAt = 0) {
   renderQueue();
   persist();
   loaded = false;
+  // Hentikan lagu sebelumnya segera (file lokal besar butuh waktu dibaca)
+  if (!media.paused) media.pause();
   try {
     const src = await sourceUrl(t);
-    if (seq !== loadSeq) return;
-    media.src = src;
+    if (seq !== loadSeq) { if (src.startsWith('blob:')) URL.revokeObjectURL(src); return; }
+    setSource(src);
     loaded = true;
   } catch {
     if (seq !== loadSeq) return;
@@ -129,7 +140,7 @@ async function load(autoplay = true, startAt = 0) {
   }
   if (startAt) media.addEventListener('loadedmetadata', () => { media.currentTime = startAt; }, { once: true });
   if (autoplay) media.play().catch(() => {});
-  if (autoplay && lastRecorded !== t.id) { lastRecorded = t.id; recordPlay(t); }
+  if (autoplay && !t.radio && lastRecorded !== t.id) { lastRecorded = t.id; recordPlay(t); }
 }
 
 export function toggle() {
@@ -138,6 +149,7 @@ export function toggle() {
   if (media.paused) media.play().catch(() => {}); else media.pause();
 }
 export function pause() { media.pause(); }
+export function setRepeat(mode) { state.repeat = mode; updateModes(); persist(); }
 export function resume() { if (!current()) return; if (!loaded) load(true); else media.play().catch(() => {}); }
 
 export function next(auto = false) {
@@ -186,6 +198,9 @@ function updateNowPlaying() {
   $('fullSource').textContent = state.source;
   fillCover($('fullCover'), t, { hq: true });
   $('stage').classList.toggle('is-video', Boolean(t.isVideo));
+  full.classList.toggle('is-live', Boolean(t.radio));
+  mini.classList.toggle('is-live', Boolean(t.radio));
+  if (t.radio) $('fullTitle').append(h('span.live-badge', { text: 'LIVE' }));
   updateFav();
   document.title = `${t.title} · ${t.artist} — SoundWave`;
   if ('mediaSession' in navigator) {
@@ -202,7 +217,7 @@ function updateNowPlaying() {
 }
 function updateFav() {
   const t = current();
-  const fav = t && store.favorites.has(t.id);
+  const fav = t && (t.radio ? isFavRadio(t.radio.uuid) : store.favorites.has(t.id));
   $('favBtn').setAttribute('aria-pressed', String(Boolean(fav)));
 }
 function updateModes() {
@@ -218,6 +233,10 @@ function updatePlayState() {
 
 let seeking = false;
 function updateTime() {
+  if (current()?.radio) { // siaran langsung: tanpa durasi
+    $('miniProg').style.width = '0'; $('tCur').textContent = fmtDur(media.currentTime || 0); $('tDur').textContent = 'LIVE';
+    return;
+  }
   const d = media.duration || current()?.duration || 0;
   const c = media.currentTime || 0;
   $('miniProg').style.width = d ? (c / d) * 100 + '%' : '0';
@@ -275,7 +294,11 @@ export function initPlayer({ trackMenu }) {
   $('repeatBtn').addEventListener('click', cycleRepeat);
   $('favBtn').addEventListener('click', async () => {
     const t = current(); if (!t) return;
-    try { const fav = await toggleFavorite(t); toast(fav ? 'Ditambahkan ke Favorit' : 'Dihapus dari Favorit'); } catch (e) { toast(e.message, { type: 'error' }); }
+    try {
+      const fav = t.radio ? await toggleRadioFav(t.radio) : await toggleFavorite(t);
+      updateFav();
+      toast(fav ? 'Ditambahkan ke Favorit' : 'Dihapus dari Favorit');
+    } catch (e) { toast(e.message, { type: 'error' }); }
   });
   $('fullMenu').addEventListener('click', () => current() && trackMenu(current(), { fromPlayer: true }));
   $('queueBtn').addEventListener('click', () => {
@@ -298,9 +321,11 @@ export function initPlayer({ trackMenu }) {
   media.addEventListener('pause', () => { updatePlayState(); persist(); });
   media.addEventListener('timeupdate', updateTime);
   media.addEventListener('loadedmetadata', updateTime);
-  media.addEventListener('ended', () => next(true));
+  media.addEventListener('ended', () => { updatePlayState(); next(true); });
+  media.addEventListener('emptied', updatePlayState);
   media.addEventListener('error', () => {
-    if (!current()) return;
+    // Abaikan error dari sumber lama / saat sumber sedang diganti
+    if (!current() || !loaded || !media.getAttribute('src')) return;
     if (++failStreak >= Math.min(5, state.queue.length)) { toast('Beberapa lagu gagal diputar. Pemutaran dihentikan.', { type: 'error' }); return; }
     toast(`Gagal memutar “${current().title}”. Melewati…`, { type: 'error' });
     setTimeout(() => next(true), 1200);
@@ -324,6 +349,7 @@ export function initPlayer({ trackMenu }) {
   });
 
   on('favorites', updateFav);
+  on('radio:fav', updateFav);
   on('preview:start', () => media.pause()); // pratinjau YouTube diputar → jeda pustaka
   updateModes();
 }

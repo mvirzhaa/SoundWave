@@ -102,6 +102,12 @@ function publicUser(u) {
     email: u.email,
     drive: {
       configured: Boolean(cfg.GOOGLE_CLIENT_ID && cfg.GOOGLE_CLIENT_SECRET),
+      linkAvailable: Boolean(cfg.GOOGLE_API_KEY),
+      // mode aktif: 'oauth' | 'link' | null. Data lama tanpa mode dianggap 'oauth'.
+      mode: u.drive_mode === 'link' ? 'link' : u.google_refresh_enc ? 'oauth' : null,
+      readOnly: u.drive_mode === 'link',
+      // siap dipakai untuk memutar pustaka Drive
+      ready: Boolean(u.drive_folder_id && (u.drive_mode === 'link' ? cfg.GOOGLE_API_KEY : u.google_refresh_enc)),
       connected: Boolean(u.google_refresh_enc),
       googleEmail: u.google_email || null,
       folderId: u.drive_folder_id || null,

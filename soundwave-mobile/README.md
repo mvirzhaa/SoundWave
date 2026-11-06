@@ -47,11 +47,17 @@ expo-speech · expo-file-system · react-native-webview.
     (musik dijeda lalu dilanjutkan). Saat aplikasi tertutup, **notifikasi terjadwal** tetap muncul tepat waktu
     (±12 hari ke depan dijadwalkan ulang setiap aplikasi dibuka); ketuk notifikasi untuk memutar adzan.
   - Jadwal & suara adzan disimpan di HP sehingga tetap berjalan offline.
-- **Hapalan Quran** (Pustaka → Playlist, atau dari tab Sholat): Juz 30 + Al-Fatihah / 114 surat, pilih qari,
-  **Hafalan per ayat** (menu ⋮, ulangi tiap ayat 1/3/5/7×), tab **Ayat** di pemutar menampilkan teks Arab,
-  Latin & terjemahan dengan ayat aktif disorot. Bisa diunduh untuk offline seperti lagu lainnya.
-- **Akun**: hubungkan Google Drive (login Google di browser), atur/buat folder, kelola penyimpanan offline,
-  ganti sandi, keluar.
+- **Hapalan Quran** (Pustaka → Playlist, atau dari tab Sholat): Juz 30 + Al-Fatihah / 114 surat, pilih qari.
+  Ketuk **nama Arab** surat untuk layar **Baca surat** (teks Arab, Latin, terjemahan; ketuk ayat untuk memutar dari
+  ayat itu, tekan lama untuk ulang 3×). Menu ⋮ → **Ulangi / hafalan**: ulangi surat utuh, atau tiap ayat
+  3/7/11/20/40×. Saat murottal diputar, pemutar langsung membuka tab **Ayat** dengan ayat aktif disorot.
+- **Radio** (tab ke-2): stasiun populer Indonesia, cari nama / kota / frekuensi ("101.1"), semua negara, favorit.
+  Siaran lewat internet (memakai kuota), bukan tuner FM.
+- **Urutan tab**: Pustaka (layar pertama) · Radio · Cari · Sholat · Akun.
+- **Akun** (akordion): Tampilan & bahasa (tema **Ikuti sistem / Gelap / Terang**, bahasa **Indonesia / English**),
+  Google Drive dua mode (**Link folder** tanpa login, hanya memutar · **Login Google** untuk memutar + menyimpan),
+  penyimpanan offline, contoh perintah suara, ganti sandi, keluar. Perintah suara tetap berbahasa Indonesia.
+- Saat aplikasi dibuka tampil logo SoundWave (splash), bukan layar bawaan Expo.
 
 ## Menjalankan (development)
 
@@ -91,19 +97,22 @@ src/
 ├── app/                      # Expo Router — setiap file = layar
 │   ├── _layout.tsx           # provider + proteksi login
 │   ├── login.tsx
-│   ├── (tabs)/index.tsx      # Cari
-│   ├── (tabs)/library.tsx    # Pustaka
+│   ├── (tabs)/index.tsx      # Pustaka (layar pertama)
+│   ├── (tabs)/radio.tsx      # Radio
+│   ├── (tabs)/search.tsx     # Cari
 │   ├── (tabs)/sholat.tsx     # Jadwal sholat, lokasi, adzan
 │   ├── (tabs)/account.tsx    # Akun
 │   ├── quran.tsx             # playlist Hapalan Quran
+│   ├── surat/[n].tsx         # baca surat (Arab, Latin, terjemahan)
 │   ├── playlist/[id].tsx     # detail playlist
 │   ├── group/[kind]/[name].tsx  # artis / genre
 │   ├── player.tsx            # pemutar penuh (modal)
 │   ├── voice.tsx             # perintah suara (modal)
 │   └── drive.tsx             # cadangan deep link soundwave://drive
 ├── lib/                      # api, auth, library, player (AudioPlaylist), offline, ui, theme, types,
-│                             # sholat (lokasi + adzan + notifikasi), prayer (hitung jadwal offline)
-└── components/               # Cover, TrackRow, TrackMenu, MiniPlayer, Common
+│                             # sholat (lokasi + adzan + notifikasi), prayer (hitung jadwal offline),
+│                             # radio, settings (tema & bahasa), i18n + i18n-en (kamus English)
+└── components/               # Cover, TrackRow, TrackMenu, MiniPlayer, Common, Lyrics, Accordion
 ```
 
 ## Catatan
@@ -121,3 +130,7 @@ src/
   `plugins → expo-notifications → sounds` di `app.json`, isi `EXPO_PUBLIC_ADZAN_SOUND=adzan.wav` di `.env`,
   lalu build ulang. Tanpa itu notifikasi memakai bunyi bawaan HP.
 - Lokasi hanya dibaca saat aplikasi aktif (izin "saat aplikasi digunakan"); tidak ada pelacakan latar belakang.
+- **Menambah terjemahan**: teks di kode ditulis `T('teks Indonesia')`; padanan bahasa Inggris ada di
+  `src/lib/i18n-en.ts`. Teks yang belum ada di kamus tampil dalam bahasa Indonesia.
+- Versi ini menambah modul native (`expo-splash-screen`, `expo-location`, `expo-notifications`): jalankan
+  `npm install` lalu **build ulang** aplikasi (bukan sekadar reload).

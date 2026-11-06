@@ -49,6 +49,7 @@ export const I = {
   download: 'M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14',
   cloud: 'M7 19a5 5 0 0 1-.6-9.96A6 6 0 0 1 17.8 8.5 4.5 4.5 0 0 1 17.5 19H7zM12 17v-6m-2.5 2.5L12 11l2.5 2.5',
   user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0',
+  radio: 'M4 9h16v11H4zM8 9l9-5M8 13.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM13 13h4M13 16h4',
   video: 'M3 6h13v12H3zM16 10l5-3v10l-5-3',
 };
 
@@ -68,7 +69,18 @@ function hue(str) { let x = 0; for (const c of String(str)) x = (x * 31 + c.char
 export function fillCover(el, track, { hq = false } = {}) {
   el.textContent = '';
   el.style.removeProperty('--h');
+  el.classList.remove('quran-cover', 'radio-cover');
   const yt = track?.ytId;
+  if (track?.radio) {
+    // Sampul radio: logo stasiun bila ada, kalau tidak ikon radio + frekuensi
+    el.classList.add('gen', 'radio-cover');
+    if (track.coverUri) {
+      const img = h('img', { alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', src: track.coverUri });
+      img.onerror = () => { img.remove(); el.append(icon(I.radio)); };
+      el.append(img);
+    } else el.append(track.radio.freq ? h('span.qnum', { text: track.radio.freq }) : icon(I.radio));
+    return el;
+  }
   if (track?.quran) {
     // Sampul murottal: nomor surat di atas gradasi hijau
     el.classList.add('gen', 'quran-cover');

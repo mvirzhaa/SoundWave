@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { ActivityIndicator, PanResponder, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { C } from '../lib/theme';
+import { C, currentScheme, themed } from '../lib/theme';
 
 export function Button({ label, icon, onPress, kind = 'primary', disabled, loading, style }: {
   label: string; icon?: keyof typeof Ionicons.glyphMap; onPress: () => void; kind?: 'primary' | 'ghost' | 'danger';
@@ -65,7 +65,7 @@ export function Chip({ label, active, onPress }: { label: string; active?: boole
   );
 }
 
-const s = StyleSheet.create({
+const s = themed(() => StyleSheet.create({
   btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 999 },
   ghost: { borderWidth: 1, borderColor: C.border },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
@@ -76,7 +76,7 @@ const s = StyleSheet.create({
   seekWrap: { height: 28, justifyContent: 'center' },
   track: { height: 5, borderRadius: 3, backgroundColor: C.surface2, overflow: 'hidden' },
   fill: { height: '100%', backgroundColor: C.accent },
-  thumb: { position: 'absolute', width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff' },
+  thumb: { position: 'absolute', width: 16, height: 16, borderRadius: 8, backgroundColor: currentScheme() === 'light' ? C.accent : '#fff' },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
   chipText: { color: C.text, fontWeight: '600', fontSize: 14 },
-});
+}));

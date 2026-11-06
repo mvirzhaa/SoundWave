@@ -87,7 +87,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const setLocalGenre = (t: Track, genre: string) => setLocalTracks(Local.setLocalGenre(t.id, genre.trim()));
   const removeImported = (t: Track) => { Local.deleteImported(t); setLocalTracks((l) => l.filter((x) => x.id !== t.id)); };
 
-  const driveReady = Boolean(user?.drive.connected && user?.drive.folderId);
+  const driveReady = Boolean(user?.drive.ready ?? (user?.drive.connected && user?.drive.folderId));
 
   const load = useCallback(async (refresh = false) => {
     if (!user) return;
@@ -108,7 +108,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, driveReady]);
 
-  useEffect(() => { setTracks(null); if (user) load(); }, [user?.id, user?.drive.folderId, user?.drive.connected]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setTracks(null); if (user) load(); }, [user?.id, user?.drive.folderId, user?.drive.connected, user?.drive.mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Favorit lagu lokal (ID-nya disimpan server, file tetap di HP)
   useEffect(() => {

@@ -18,6 +18,7 @@ const DEFAULTS = {
     pengingat: 0, // menit sebelum waktu sholat (0 = mati)
   },
   quran: { qari: '05', semua: false },
+  radio: { favorit: [] }, // stasiun favorit (maks. 100)
 };
 
 const getRow = db.prepare('SELECT data FROM user_prefs WHERE user_id = ?');
@@ -71,6 +72,11 @@ function update(userId, patch) {
   if (isObj(p.quran)) {
     if (/^\d{2}$/.test(String(p.quran.qari || ''))) next.quran.qari = String(p.quran.qari);
     if (typeof p.quran.semua === 'boolean') next.quran.semua = p.quran.semua;
+  }
+  if (isObj(p.radio) && Array.isArray(p.radio.favorit)) {
+    // eslint-disable-next-line global-require
+    const { sanitizeStation } = require('./radio');
+    next.radio.favorit = p.radio.favorit.map(sanitizeStation).filter(Boolean).slice(0, 100);
   }
   putRow.run(userId, JSON.stringify(next), Date.now());
   return next;

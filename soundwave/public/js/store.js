@@ -23,7 +23,9 @@ export function setUser(u) {
   emit('user', u);
 }
 
-export const driveReady = () => Boolean(store.user?.drive?.connected && store.user?.drive?.folderId);
+export const driveReady = () => Boolean(store.user?.drive?.ready ?? (store.user?.drive?.connected && store.user?.drive?.folderId));
+/** Bisa menyimpan ke Drive (mode login Google, bukan mode link folder). */
+export const driveWritable = () => driveReady() && !store.user?.drive?.readOnly;
 
 let loading = null;
 export async function loadTracks(refresh = false) {

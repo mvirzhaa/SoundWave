@@ -1,7 +1,7 @@
 /** Halaman Cari: pencarian YouTube, pratinjau, konversi MP3/MP4, unduh / simpan ke Drive. */
 import { h, icon, I, fmtDur, fmtSize, debounce, fillBars, toast } from '../ui.js';
-import { get, post, api, apiUrl } from '../api.js';
-import { store, emit, on, driveReady, invalidateTracks } from '../store.js';
+import { get, post, api } from '../api.js';
+import { store, emit, on, driveReady, driveWritable, invalidateTracks } from '../store.js';
 
 let config = { mp3: [128, 192, 256, 320], mp4: [360, 480, 720, 1080] };
 get('/api/config').then((c) => { config = c; }).catch(() => {});
@@ -205,7 +205,10 @@ function buildCard(it) {
     if (job.driveLink) return showDriveLink(job.driveLink);
     if (!store.user?.drive?.configured) { driveBtn.hidden = true; return; }
     driveBtn.hidden = false; driveBtn.disabled = false;
-    if (!driveReady()) {
+    if (driveReady() && !driveWritable()) {
+      driveBtn.hidden = true;
+      driveMsg.append('Mode link folder hanya untuk memutar. Pilih "Login Google" di ', h('a', { href: '#/akun', text: 'menu Akun' }), ' untuk menyimpan ke Drive.');
+    } else if (!driveReady()) {
       driveBtn.hidden = true;
       driveMsg.append(store.user?.drive?.connected ? 'Atur folder Drive Anda di ' : 'Hubungkan Google Drive di ',
         h('a', { href: '#/akun', text: 'menu Akun' }), ' untuk menyimpan ke Drive.');

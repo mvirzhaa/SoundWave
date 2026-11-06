@@ -1,18 +1,19 @@
 /** Lirik tersinkron (karaoke) di pemutar penuh: LRCLIB → subtitle YouTube. */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { T } from '../lib/i18n';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { File, Paths } from 'expo-file-system';
 import { get } from '../lib/api';
 import { usePlayer } from '../lib/player';
-import { C } from '../lib/theme';
+import { C, themed } from '../lib/theme';
 import type { Track } from '../lib/types';
 
 type Line = { t: number; text: string };
 type LyricsData = { found: boolean; source?: string; synced?: boolean; instrumental?: boolean; lines?: Line[]; plain?: string };
 
 const SOURCE_LABEL: Record<string, string> = {
-  lrclib: 'Lirik dari LRCLIB',
+  lrclib: 'Lirik dari LRCLIB', // diterjemahkan saat ditampilkan
   youtube: 'Subtitle YouTube',
   'youtube-auto': 'Subtitle otomatis YouTube — mungkin kurang akurat',
 };
@@ -58,7 +59,7 @@ function QuranText({ track }: { track: Track }) {
     if (data && active > 0) setTimeout(() => listRef.current?.scrollToIndex({ index: active - 1, viewPosition: 0.2, animated: true }), 250);
   }, [data, active]);
   if (err) return <Center icon="cloud-offline-outline" text={err} onRetry={load} />;
-  if (!data) return <View style={s.center}><ActivityIndicator color={C.accent} /><Text style={s.muted}>Memuat teks surat…</Text></View>;
+  if (!data) return <View style={s.center}><ActivityIndicator color={C.accent} /><Text style={s.muted}>{T('Memuat teks surat…')}</Text></View>;
   return (
     <View style={{ flex: 1 }}>
       <View style={s.head}><Text style={s.source} numberOfLines={1}>{data.namaLatin} · {data.arti} · {data.jumlahAyat} ayat — teks & terjemahan Kemenag RI</Text></View>
@@ -130,18 +131,18 @@ function SongLyrics({ track }: { track: Track }) {
   const nudge = (dv: number) => { const v = offset + dv; setOffset(v); saveOffset(track.id, v); userScrollAt.current = 0; };
 
   if (err) return <Center icon="cloud-offline-outline" text={err} onRetry={() => load(true)} />;
-  if (!data) return <View style={s.center}><ActivityIndicator color={C.accent} /><Text style={s.muted}>Mencari lirik…</Text></View>;
-  if (!data.found) return <Center icon="document-text-outline" text="Lirik belum tersedia untuk lagu ini." sub={`Dicari di LRCLIB${track.ytId ? ' dan subtitle YouTube' : ''}.`} onRetry={() => load(true)} />;
-  if (data.instrumental) return <Center icon="musical-notes-outline" text="♪ Lagu instrumental ♪" />;
+  if (!data) return <View style={s.center}><ActivityIndicator color={C.accent} /><Text style={s.muted}>{T('Mencari lirik…')}</Text></View>;
+  if (!data.found) return <Center icon="document-text-outline" text={T("Lirik belum tersedia untuk lagu ini.")} sub={track.ytId ? T('Dicari di LRCLIB dan subtitle YouTube.') : T('Dicari di LRCLIB.')} onRetry={() => load(true)} />;
+  if (data.instrumental) return <Center icon="musical-notes-outline" text={T("♪ Lagu instrumental ♪")} />;
 
   const head = (
     <View style={s.head}>
-      <Text style={s.source} numberOfLines={1}>{SOURCE_LABEL[data.source || ''] || data.source}</Text>
+      <Text style={s.source} numberOfLines={1}>{T(SOURCE_LABEL[data.source || ''] || data.source || '')}</Text>
       {data.synced ? (
         <View style={s.offset}>
-          <Pressable hitSlop={8} onPress={() => nudge(-0.5)} accessibilityLabel="Lirik lebih awal"><Ionicons name="remove" size={18} color={C.text} /></Pressable>
-          <Text style={s.offText}>{offset ? `${offset > 0 ? '+' : ''}${offset.toFixed(1)} dtk` : 'Pas'}</Text>
-          <Pressable hitSlop={8} onPress={() => nudge(0.5)} accessibilityLabel="Lirik lebih lambat"><Ionicons name="add" size={18} color={C.text} /></Pressable>
+          <Pressable hitSlop={8} onPress={() => nudge(-0.5)} accessibilityLabel={T("Lirik lebih awal")}><Ionicons name="remove" size={18} color={C.text} /></Pressable>
+          <Text style={s.offText}>{offset ? `${offset > 0 ? '+' : ''}${offset.toFixed(1)} ${T('dtk')}` : 'Pas'}</Text>
+          <Pressable hitSlop={8} onPress={() => nudge(0.5)} accessibilityLabel={T("Lirik lebih lambat")}><Ionicons name="add" size={18} color={C.text} /></Pressable>
         </View>
       ) : null}
       <Pressable hitSlop={8} onPress={() => load(true)}><Ionicons name="refresh" size={18} color={C.muted} /></Pressable>
@@ -178,12 +179,12 @@ function Center({ icon, text, sub, onRetry }: { icon: keyof typeof Ionicons.glyp
       <Ionicons name={icon} size={40} color={C.muted} />
       <Text style={s.centerText}>{text}</Text>
       {sub ? <Text style={s.muted}>{sub}</Text> : null}
-      {onRetry ? <Pressable onPress={onRetry} style={s.retry}><Text style={{ color: C.accent, fontWeight: '700' }}>Cari ulang</Text></Pressable> : null}
+      {onRetry ? <Pressable onPress={onRetry} style={s.retry}><Text style={{ color: C.accent, fontWeight: '700' }}>{T('Cari ulang')}</Text></Pressable> : null}
     </View>
   );
 }
 
-const s = StyleSheet.create({
+const s = themed(() => StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 24 },
   centerText: { color: C.text, fontWeight: '600', textAlign: 'center', fontSize: 16 },
   muted: { color: C.muted, textAlign: 'center' },
@@ -200,4 +201,4 @@ const s = StyleSheet.create({
   arab: { color: C.text, fontSize: 28, lineHeight: 52, textAlign: 'right', writingDirection: 'rtl' },
   latin: { color: C.accent2, fontStyle: 'italic', fontSize: 14, lineHeight: 20, marginTop: 6 },
   arti: { color: C.muted, fontSize: 14, lineHeight: 21, marginTop: 4 },
-});
+}));

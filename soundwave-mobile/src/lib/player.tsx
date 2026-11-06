@@ -23,7 +23,7 @@ type PlayerCtx = {
   shuffle: boolean;
   repeat: Repeat;
   source: string;
-  playList: (tracks: Track[], index?: number | null, opts?: { shuffle?: boolean; source?: string }) => Promise<void>;
+  playList: (tracks: Track[], index?: number | null, opts?: { shuffle?: boolean; source?: string; repeat?: Repeat }) => Promise<void>;
   toggle: () => void;
   pause: () => void;
   resume: () => void;
@@ -36,6 +36,7 @@ type PlayerCtx = {
   addToQueue: (t: Track) => Promise<void>;
   setShuffle: (on: boolean) => void;
   cycleRepeat: () => Repeat;
+  setRepeatMode: (m: Repeat) => void;
   stop: () => void;
 };
 
@@ -47,7 +48,12 @@ const LOOP: Record<Repeat, 'none' | 'all' | 'single'> = { off: 'none', all: 'all
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const { recordPlay } = useLibrary();
+  // Simpan di ref: fungsi dari useLibrary berganti identitas setiap pustaka berubah, dan TIDAK boleh
+  // memicu pembuatan ulang pemutar (dulu pemutar lama tetap berbunyi tanpa bisa dijeda).
+  const recordPlayRef = useRef(recordPlay);
+  recordPlayRef.current = recordPlay;
   const pl = useRef<AudioPlaylist | null>(null);
+  const playSeq = useRef(0);
   const tokenRef = useRef<string>('');
   const queueRef = useRef<Track[]>([]);
   const originalRef = useRef<Track[]>([]);
@@ -69,7 +75,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (t.local && t.uri) return { uri: t.uri }; // file di penyimpanan HP
     const local = offlineUri(t.id);
     if (local) return { uri: local };
-    if (t.url && t.id.startsWith('quran-')) return { uri: t.url }; // murottal langsung dari CDN
+    if (t.url && /^(quran|radio)-/.test(t.id)) return { uri: t.url }; // murottal (CDN) / siaran radio
     return { uri: `${getServer()}/api/library/stream/${encodeURIComponent(t.id)}?t=${encodeURIComponent(tokenRef.current)}` };
   }, []);
 
@@ -81,9 +87,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const t = queueRef.current[i];
     if (!t) return;
     if (lockActive.current) pl.current?.updateLockScreenMetadata(meta(t));
-    if (lastRecorded.current !== t.id) { lastRecorded.current = t.id; recordPlay(t); }
-  }, [recordPlay]);
+    if (!t.radio && lastRecorded.current !== t.id) { lastRecorded.current = t.id; recordPlayRef.current(t); }
+  }, []);
 
+  // Satu pemutar untuk seluruh umur aplikasi
   useEffect(() => {
     setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix' }).catch(() => {});
     const p = createAudioPlaylist({ sources: [], updateInterval: 500, loop: 'none' });
@@ -96,18 +103,48 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (st.currentIndex !== indexRef.current && st.currentIndex >= 0) onTrack(st.currentIndex);
     });
     const s2 = p.addListener('trackChanged', ({ currentIndex }) => onTrack(currentIndex));
-    return () => { s1.remove(); s2.remove(); p.destroy(); pl.current = null; };
-  }, [onTrack]);
+    // Pengaman: baca status langsung dari pemutar tiap 500 ms (waktu, ikon play/pause, lirik tetap bergerak
+    // walaupun event status dari sistem terlambat/tidak terkirim di sebagian HP Android)
+    const last = { t: -1, d: -1, pl: false, b: false };
+    const poll = setInterval(() => {
+      try {
+        const t = Math.round((p.currentTime || 0) * 4) / 4;
+        const d = p.duration || 0;
+        const pl2 = !!p.playing;
+        const b = !!p.isBuffering;
+        if (t !== last.t) { last.t = t; setPosition(p.currentTime || 0); }
+        if (d !== last.d) { last.d = d; setDuration(d); }
+        if (pl2 !== last.pl) { last.pl = pl2; setPlaying(pl2); }
+        if (b !== last.b) { last.b = b; setBuffering(b); }
+        const ci = p.currentIndex;
+        if (ci >= 0 && ci !== indexRef.current && ci < queueRef.current.length) onTrack(ci);
+      } catch { /* pemutar sedang dilepas */ }
+    }, 500);
+    return () => {
+      clearInterval(poll);
+      s1.remove(); s2.remove();
+      // Hentikan suara dulu sebelum dilepas, agar tidak ada audio "yatim" yang terus berbunyi
+      try { p.pause(); p.clear(); p.clearLockScreenControls(); } catch { /* abaikan */ }
+      p.destroy();
+      if (pl.current === p) pl.current = null;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const commitQueue = (q: Track[]) => { queueRef.current = q; setQueue(q); };
 
-  const playList = async (tracks: Track[], start: number | null = 0, opts: { shuffle?: boolean; source?: string } = {}) => {
-    const p = pl.current;
-    if (!p) return;
+  const playList = async (tracks: Track[], start: number | null = 0, opts: { shuffle?: boolean; source?: string; repeat?: Repeat } = {}) => {
+    if (!pl.current) return;
     const wanted = start == null ? null : tracks[start];
     const list = tracks.filter((t) => t && t.available !== false && (!t.local || t.uri));
     if (!list.length) return;
-    try { tokenRef.current = await mediaToken(); } catch { /* lagu offline tetap bisa diputar */ }
+    const seq = ++playSeq.current;
+    // Token hanya perlu untuk streaming dari server; lagu di HP / offline / murottal langsung diputar tanpa menunggu
+    const needsToken = list.some((t) => !(t.local && t.uri) && !offlineUri(t.id) && !(t.url && /^(quran|radio)-/.test(t.id)));
+    if (needsToken) { try { tokenRef.current = await mediaToken(); } catch { /* lagu offline tetap bisa diputar */ } }
+    // Pengguna mengetuk lagu lain selagi menunggu token → hanya ketukan terakhir yang dipakai
+    if (seq !== playSeq.current) return;
+    const p = pl.current;
+    if (!p) return;
     const sh = opts.shuffle ?? shuffle;
     setShuffleState(sh);
     setSource(opts.source || 'Pustaka');
@@ -116,9 +153,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const q = sh ? [list[startIdx], ...shuffled(list.filter((_, i) => i !== startIdx))] : list;
     const begin = sh ? 0 : startIdx;
     commitQueue(q);
+    p.pause();
     p.clear();
     q.forEach((t) => p.add(sourceFor(t)));
-    p.loop = LOOP[repeat];
+    const rep = opts.repeat ?? repeat;
+    if (rep !== repeat) setRepeat(rep);
+    p.loop = LOOP[rep];
     p.skipTo(begin);
     p.play();
     p.setActiveForLockScreen(true, meta(q[begin]), { showNextTrack: true, showPreviousTrack: true });
@@ -127,8 +167,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     onTrack(begin);
   };
 
-  const toggle = () => { const p = pl.current; if (!p || !queueRef.current.length) return; p.playing ? p.pause() : p.play(); };
-  const pause = () => pl.current?.pause();
+  const toggle = () => {
+    const p = pl.current;
+    if (!p || !queueRef.current.length) return;
+    if (p.playing) { p.pause(); setPlaying(false); } else { p.play(); setPlaying(true); }
+  };
+  const pause = () => { pl.current?.pause(); setPlaying(false); };
   const resume = () => { if (queueRef.current.length) pl.current?.play(); };
   const next = () => pl.current?.next();
   const prev = () => {
@@ -183,11 +227,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     return nextMode;
   };
 
+  const setRepeatMode = (m: Repeat) => { setRepeat(m); if (pl.current) pl.current.loop = LOOP[m]; };
+
   const stop = () => {
     const p = pl.current;
     if (!p) return;
+    playSeq.current++;
     p.pause();
     p.clear();
+    setPlaying(false);
     if (lockActive.current) { p.clearLockScreenControls(); lockActive.current = false; }
     commitQueue([]);
     indexRef.current = -1;
@@ -197,7 +245,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const current = queue[index] || null;
   const value = useMemo(() => ({
     queue, index, current, playing, buffering, position, duration, shuffle, repeat, source,
-    playList, toggle, pause, resume, next, prev, seek, jumpTo, removeAt, playNext, addToQueue, setShuffle, cycleRepeat, stop,
+    playList, toggle, pause, resume, next, prev, seek, jumpTo, removeAt, playNext, addToQueue, setShuffle, cycleRepeat, setRepeatMode, stop,
   }), [queue, index, current, playing, buffering, position, duration, shuffle, repeat, source]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

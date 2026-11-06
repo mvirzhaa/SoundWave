@@ -1,5 +1,6 @@
 /** Tab Sholat: wilayah (GPS real time / manual), hitung mundur, jadwal hari ini, pengaturan adzan. */
 import React, { useEffect, useRef, useState } from 'react';
+import { T, currentLang } from '../../lib/i18n';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -8,7 +9,7 @@ import { get } from '../../lib/api';
 import { Kota, useSholat } from '../../lib/sholat';
 import { useUi } from '../../lib/ui';
 import { Button, Chip } from '../../components/Common';
-import { C } from '../../lib/theme';
+import { C, themed } from '../../lib/theme';
 import { fmtJam, formatTanggal, hariIni, namaWaktu, titleCase, todayIn, WAJIB, WAKTU, Wajib } from '../../lib/prayer';
 
 export default function SholatScreen() {
@@ -26,7 +27,7 @@ export default function SholatScreen() {
   const vol = Math.round((adz?.volume ?? 0.9) * 10) / 10;
 
   const lokasi = j?.lokasi || p?.kota?.lokasi || p?.koordinat?.nama || '';
-  const sumber = j ? (j.sumber === 'kemenag' ? 'Jadwal resmi Kemenag RI' : 'Dihitung dari koordinat GPS') : '';
+  const sumber = j ? (j.sumber === 'kemenag' ? T('Jadwal resmi Kemenag RI') : T('Dihitung dari koordinat GPS')) : '';
   const gpsNama = auto && p?.koordinat?.nama ? p.koordinat.nama : '';
 
   return (
@@ -40,19 +41,19 @@ export default function SholatScreen() {
             <View style={{ flex: 1 }}>
               <Text style={s.region} numberOfLines={2}>{lokasi ? titleCase(lokasi) : 'Wilayah belum diatur'}</Text>
               <Text style={s.muted} numberOfLines={2}>
-                {j ? [titleCase(j.daerah), j.zona, sumber].filter(Boolean).join(' · ') : 'Gunakan lokasi HP atau pilih kabupaten/kota.'}
+                {j ? [titleCase(j.daerah), j.zona, sumber].filter(Boolean).join(' · ') : T('Gunakan lokasi HP atau pilih kabupaten/kota.')}
               </Text>
-              {gpsNama && j?.sumber === 'kemenag' && titleCase(gpsNama) !== titleCase(lokasi) ? <Text style={s.small}>Posisi GPS: {gpsNama}</Text> : null}
-              {S.offline ? <Text style={[s.small, { color: C.warn }]}>Offline — jadwal dari HP</Text> : null}
+              {gpsNama && j?.sumber === 'kemenag' && titleCase(gpsNama) !== titleCase(lokasi) ? <Text style={s.small}>{T('Posisi GPS')}: {gpsNama}</Text> : null}
+              {S.offline ? <Text style={[s.small, { color: C.warn }]}>{T('Offline — jadwal dari HP')}</Text> : null}
             </View>
             {S.locating ? <ActivityIndicator color={C.accent} /> : null}
           </View>
           <View style={s.seg}>
-            <Chip label="📍 Lokasi HP" active={auto} onPress={() => S.locateNow()} />
-            <Chip label="Pilih manual" active={!auto && !!p?.kota} onPress={() => setPicker(true)} />
+            <Chip label={T("📍 Lokasi HP")} active={auto} onPress={() => S.locateNow()} />
+            <Chip label={T("Pilih manual")} active={!auto && !!p?.kota} onPress={() => setPicker(true)} />
           </View>
           {S.locError ? <Text style={[s.small, { color: C.danger }]}>{S.locError}</Text> : null}
-          {auto ? <Text style={s.small}>Wilayah diperbarui otomatis mengikuti posisi Anda (saat aplikasi dibuka & saat berpindah ±3 km).</Text> : null}
+          {auto ? <Text style={s.small}>{T('Wilayah diperbarui otomatis mengikuti posisi Anda (saat aplikasi dibuka & saat berpindah ±3 km).')}</Text> : null}
         </View>
 
         {S.error && !j ? <Text style={{ color: C.danger }}>{S.error}</Text> : null}
@@ -61,8 +62,9 @@ export default function SholatScreen() {
 
         {d ? (
           <View style={s.card}>
-            <Text style={s.h3}>Hari ini · {formatTanggal(todayIn(j!.tz))}</Text>
-            {WAKTU.map(([k, label]) => {
+            <Text style={s.h3}>{T('Hari ini')} · {formatTanggal(todayIn(j!.tz), currentLang())}</Text>
+            {WAKTU.map(([k, label0]) => {
+              const label = T(label0);
               const wajib = (WAJIB as string[]).includes(k);
               const on = wajib && adz?.aktif && adz.waktu[k as Wajib];
               const isNext = S.next?.key === k && S.next.date === d.date;
@@ -71,7 +73,7 @@ export default function SholatScreen() {
                   <Text style={[s.jname, !wajib && s.sunnah, isNext && { color: C.accent }]}>{label}</Text>
                   <Text style={[s.jtime, !wajib && s.sunnahTime, isNext && { color: C.accent }]}>{fmtJam(d[k])}</Text>
                   {wajib ? (
-                    <Pressable hitSlop={8} style={s.bell} onPress={() => setWaktu(k as Wajib)} accessibilityLabel={`Adzan ${label} ${on ? 'aktif' : 'mati'}`}>
+                    <Pressable hitSlop={8} style={s.bell} onPress={() => setWaktu(k as Wajib)} accessibilityLabel={`Adzan ${label}`}>
                       <Ionicons name={on ? 'notifications' : 'notifications-off-outline'} size={20} color={on ? C.accent : C.muted} />
                     </Pressable>
                   ) : <View style={s.bell} />}
@@ -84,11 +86,11 @@ export default function SholatScreen() {
         {/* Adzan */}
         {adz ? (
           <View style={s.card}>
-            <Text style={s.h3}>Adzan</Text>
-            <ToggleRow label="Putar adzan saat masuk waktu sholat" value={adz.aktif} onChange={(v) => save({ sholat: { adzan: { aktif: v } } })} />
-            <ToggleRow label="Jeda musik saat adzan, lanjutkan sesudahnya" value={adz.jedaMusik !== false} onChange={(v) => save({ sholat: { adzan: { jedaMusik: v } } })} />
+            <Text style={s.h3}>{T('Adzan')}</Text>
+            <ToggleRow label={T("Putar adzan saat masuk waktu sholat")} value={adz.aktif} onChange={(v) => save({ sholat: { adzan: { aktif: v } } })} />
+            <ToggleRow label={T("Jeda musik saat adzan, lanjutkan sesudahnya")} value={adz.jedaMusik !== false} onChange={(v) => save({ sholat: { adzan: { jedaMusik: v } } })} />
             <View style={s.row}>
-              <Text style={[s.label, { flex: 1 }]}>Volume adzan</Text>
+              <Text style={[s.label, { flex: 1 }]}>{T('Volume adzan')}</Text>
               <Pressable hitSlop={8} onPress={() => save({ sholat: { adzan: { volume: Math.max(0.1, vol - 0.1) } } })}><Ionicons name="remove-circle-outline" size={28} color={C.text} /></Pressable>
               <Text style={s.vol}>{Math.round(vol * 100)}%</Text>
               <Pressable hitSlop={8} onPress={() => save({ sholat: { adzan: { volume: Math.min(1, vol + 0.1) } } })}><Ionicons name="add-circle-outline" size={28} color={C.text} /></Pressable>
@@ -96,21 +98,21 @@ export default function SholatScreen() {
             <View style={s.row}>
               <View style={[s.dot, { backgroundColor: C.ok }]} />
               <Text style={[s.label, { flex: 1 }]} numberOfLines={2}>
-                {adz.suara.jenis === 'lagu' ? `Suara: ${adz.suara.title || 'lagu dari pustaka'}` : 'Suara adzan bawaan server'}
+                {adz.suara.jenis === 'lagu' ? T('Suara: {s}', { s: adz.suara.title || T('lagu dari pustaka') }) : T('Suara adzan bawaan server')}
               </Text>
-              {adz.suara.jenis === 'lagu' ? <Pressable onPress={() => save({ sholat: { adzan: { suara: { jenis: 'bawaan' } } } })}><Text style={s.link}>Bawaan</Text></Pressable> : null}
+              {adz.suara.jenis === 'lagu' ? <Pressable onPress={() => save({ sholat: { adzan: { suara: { jenis: 'bawaan' } } } })}><Text style={s.link}>{T('Bawaan')}</Text></Pressable> : null}
             </View>
-            <Text style={s.small}>Ganti suara adzan: menu ⋮ pada lagu/file adzan di Pustaka → “Jadikan suara adzan”.</Text>
+            <Text style={s.small}>{T('Ganti suara adzan: menu ⋮ pada lagu/file adzan di Pustaka → “Jadikan suara adzan”.')}</Text>
             <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
               <Button label={S.playing ? 'Hentikan' : 'Uji suara adzan'} icon={S.playing ? 'stop' : 'play'} kind="ghost"
                 onPress={() => (S.playing ? S.stopAdzan() : S.playAdzan('dzuhur', { test: true }))} />
-              {S.notifGranted === false ? <Button label="Izinkan notifikasi" icon="notifications-outline" onPress={async () => {
-                if (!(await S.requestNotif())) ui.toast('Izin notifikasi ditolak. Aktifkan di Pengaturan HP → Aplikasi → SoundWave.', true);
+              {S.notifGranted === false ? <Button label={T("Izinkan notifikasi")} icon="notifications-outline" onPress={async () => {
+                if (!(await S.requestNotif())) ui.toast(T('Izin notifikasi ditolak. Aktifkan di Pengaturan HP → Aplikasi → SoundWave.'), true);
               }} /> : null}
             </View>
             <Text style={s.small}>
-              Saat aplikasi terbuka atau sedang memutar musik, adzan diputar penuh. Saat aplikasi tertutup, notifikasi tetap berbunyi tepat waktu
-              {Platform.OS === 'android' ? ' (izinkan “Alarm & pengingat” dan matikan optimasi baterai untuk SoundWave agar tidak terlambat)' : ''}.
+              {T('Saat aplikasi terbuka atau sedang memutar musik, adzan diputar penuh. Saat aplikasi tertutup, notifikasi tetap berbunyi tepat waktu.')}
+              {Platform.OS === 'android' ? ` ${T('Izinkan “Alarm & pengingat” dan matikan optimasi baterai untuk SoundWave agar tidak terlambat.')}` : ''}
             </Text>
           </View>
         ) : null}
@@ -118,15 +120,15 @@ export default function SholatScreen() {
         <Pressable style={[s.card, s.row]} onPress={() => router.push('/quran')}>
           <View style={s.quranIco}><Text style={{ color: '#fff', fontWeight: '800' }}>القرآن</Text></View>
           <View style={{ flex: 1 }}>
-            <Text style={s.label}>Hapalan Quran</Text>
-            <Text style={s.muted}>Murottal Juz 30, hafalan per ayat dengan pengulangan</Text>
+            <Text style={s.label}>{T('Hapalan Quran')}</Text>
+            <Text style={s.muted}>{T('Murottal Juz 30, hafalan per ayat dengan pengulangan')}</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={C.muted} />
         </Pressable>
       </ScrollView>
       <RegionPicker visible={picker} onClose={() => setPicker(false)} onPick={async (k) => {
         setPicker(false);
-        try { await S.setManual(k); ui.toast(`Wilayah: ${titleCase(k.lokasi)}`); } catch (e: any) { ui.toast(e.message, true); }
+        try { await S.setManual(k); ui.toast(T('Wilayah: {w}', { w: titleCase(k.lokasi) })); } catch (e: any) { ui.toast(e.message, true); }
       }} />
     </>
   );
@@ -144,10 +146,10 @@ function Countdown() {
   const ss = String(sec % 60).padStart(2, '0');
   return (
     <View style={[s.card, { alignItems: 'center', gap: 2 }]}>
-      <Text style={s.muted}>Menuju</Text>
-      <Text style={s.cdName}>{namaWaktu[n.key]}</Text>
+      <Text style={s.muted}>{T('Menuju')}</Text>
+      <Text style={s.cdName}>{T(namaWaktu[n.key])}</Text>
       <Text style={s.cdTime}>{hh}:{mm}:{ss}</Text>
-      <Text style={s.muted}>pukul {fmtJam(n.jam)} {S.jadwal?.zona}</Text>
+      <Text style={s.muted}>{T('pukul')} {fmtJam(n.jam)} {S.jadwal?.zona}</Text>
     </View>
   );
 }
@@ -173,7 +175,7 @@ function RegionPicker({ visible, onClose, onPick }: { visible: boolean; onClose:
     const my = ++seq.current;
     const t = setTimeout(() => {
       get<{ kota: Kota[] }>(`/api/sholat/kota?q=${encodeURIComponent(q.trim())}`)
-        .then((r) => { if (my === seq.current) { setList(r.kota); setErr(r.kota.length ? '' : 'Wilayah tidak ditemukan.'); } })
+        .then((r) => { if (my === seq.current) { setList(r.kota); setErr(r.kota.length ? '' : T('Wilayah tidak ditemukan.')); } })
         .catch((e) => my === seq.current && setErr(e.message));
     }, 220);
     return () => clearTimeout(t);
@@ -183,8 +185,8 @@ function RegionPicker({ visible, onClose, onPick }: { visible: boolean; onClose:
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <Pressable style={{ flex: 1, backgroundColor: 'rgba(3,5,15,.6)' }} onPress={onClose} />
         <View style={[s.sheet, { paddingBottom: insets.bottom + 8 }]}>
-          <Text style={[s.h3, { paddingHorizontal: 6 }]}>Pilih wilayah</Text>
-          <TextInput style={s.input} value={q} onChangeText={setQ} placeholder="Ketik nama kota/kabupaten, mis. Bogor" placeholderTextColor={C.muted} autoFocus />
+          <Text style={[s.h3, { paddingHorizontal: 6 }]}>{T('Pilih wilayah')}</Text>
+          <TextInput style={s.input} value={q} onChangeText={setQ} placeholder={T("Ketik nama kota/kabupaten, mis. Bogor")} placeholderTextColor={C.muted} autoFocus />
           {err ? <Text style={[s.small, { paddingHorizontal: 6 }]}>{err}</Text> : null}
           <FlatList style={{ maxHeight: 380 }} data={list} keyExtractor={(k) => k.id} keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
@@ -199,7 +201,7 @@ function RegionPicker({ visible, onClose, onPick }: { visible: boolean; onClose:
   );
 }
 
-const s = StyleSheet.create({
+const s = themed(() => StyleSheet.create({
   card: { backgroundColor: C.surface, borderRadius: 18, borderWidth: 1, borderColor: C.border, padding: 16, gap: 12 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   seg: { flexDirection: 'row', gap: 8 },
@@ -224,4 +226,4 @@ const s = StyleSheet.create({
   sheet: { backgroundColor: C.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 12, gap: 10, borderWidth: 1, borderColor: C.border },
   input: { borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: C.text, fontSize: 16, backgroundColor: C.bg },
   item: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 10, paddingVertical: 13, borderRadius: 12 },
-});
+}));

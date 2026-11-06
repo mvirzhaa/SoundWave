@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ytThumb } from '../lib/api';
-import { C, hueColor } from '../lib/theme';
+import { C, hueColor, themed } from '../lib/theme';
 
 type Props = {
   ytId?: string | null;
@@ -14,13 +14,24 @@ type Props = {
   hq?: boolean;
   icon?: keyof typeof Ionicons.glyphMap;
   quran?: number | string; // nomor surat → sampul hijau bernomor
+  radio?: string; // stasiun radio: logo (uri) atau frekuensi di atas warna biru
 };
 
 export const QURAN_GREEN = '#0f8a64';
+export const RADIO_BLUE = '#3b5bdb';
 
 /** Sampul lagu: thumbnail YouTube (dipotong persegi) atau warna dari judul + ikon. */
-export function Cover({ ytId, uri: localUri, seed = '', size, radius = 10, hq, icon = 'musical-notes', quran }: Props) {
+export function Cover({ ytId, uri: localUri, seed = '', size, radius = 10, hq, icon = 'musical-notes', quran, radio }: Props) {
   const [failed, setFailed] = useState(false);
+  if (radio != null) {
+    return (
+      <View style={[st.box, { width: size, height: size, borderRadius: radius, backgroundColor: localUri && !failed ? '#fff' : RADIO_BLUE }]}>
+        {localUri && !failed ? <Image source={{ uri: localUri }} style={{ width: size * 0.86, height: size * 0.86 }} contentFit="contain" onError={() => setFailed(true)} />
+          : radio ? <Text style={{ color: '#fff', fontWeight: '800', fontSize: size * (radio.length > 4 ? 0.24 : 0.28) }}>{radio}</Text>
+          : <Ionicons name="radio" size={size * 0.45} color="#fff" />}
+      </View>
+    );
+  }
   if (quran != null) {
     const label = String(quran);
     return (
@@ -56,7 +67,7 @@ export function Collage({ ids, size, radius = 14, icon = 'musical-notes' }: { id
   );
 }
 
-const st = StyleSheet.create({
+const st = themed(() => StyleSheet.create({
   box: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   grid: { overflow: 'hidden', flexDirection: 'row', flexWrap: 'wrap', backgroundColor: C.surface2 },
-});
+}));

@@ -4,6 +4,7 @@ import { get, post, put, patch, del } from '../api.js';
 import { store, on, loadTracks, driveReady, toggleFavorite } from '../store.js';
 import { playList, playNext, addToQueue, current } from '../player.js';
 import { savePrefs as saveSholatPrefs } from '../sholat.js';
+import { isFavRadio, toggleRadioFav } from '../radio.js';
 import { localState, fsaSupported, pickFolder, reconnect, rescan, forgetFolder, setLocalGenre, localById } from '../local.js';
 
 const TABS = [['lagu', 'Lagu'], ['playlist', 'Playlist'], ['artis', 'Artis'], ['genre', 'Genre']];
@@ -49,6 +50,7 @@ function trackList(tracks, ctx) {
 
 /** Menu aksi untuk satu lagu (dipakai juga oleh pemutar penuh). */
 export function trackMenu(t, ctx = {}) {
+  if (t.radio) return radioMenu(t);
   const fav = store.favorites.has(t.id);
   const pl = ctx.playlist && !ctx.playlist.special ? ctx.playlist : null;
   actionMenu(h('span.menu-track', {}, cover(t, 'sm'), h('span', {}, h('b', { text: t.title }), h('small', { text: t.artist }))), [
@@ -59,7 +61,7 @@ export function trackMenu(t, ctx = {}) {
       try { const f = await toggleFavorite(t); toast(f ? 'Ditambahkan ke Favorit' : 'Dihapus dari Favorit'); ctx.onChange?.(); } catch (e) { toast(e.message, { type: 'error' }); }
     } },
     !t.quran && t.artist && t.artist !== 'Tidak diketahui' && { label: `Lihat artis: ${t.artist}`, icon: I.user, run: () => { location.hash = '#/artis/' + encodeURIComponent(t.artist); } },
-    t.quran && !t.quran.ayat && { label: 'Hafalan per ayat…', icon: 'M4 6h16M4 10h10M4 14h12M17 17l2 2 3-4', run: () => hafalanMenu(t) },
+    t.quran && !t.quran.ayat && { label: 'Ulangi / hafalan…', icon: 'M4 6h16M4 10h10M4 14h12M17 17l2 2 3-4', run: () => hafalanMenu(t) },
     !t.quran && { label: `Ubah genre${t.genre ? ` (${t.genre})` : ''}`, icon: 'M4 7h16M4 12h10M4 17h6', run: () => editGenre(t, ctx) },
     !t.quran && { label: 'Jadikan suara adzan', icon: 'M12 3c3 2 5 4.5 5 8H7c0-3.5 2-6 5-8zM5 11h14v10H5z', run: async () => {
       try { await saveSholatPrefs({ sholat: { adzan: { suara: { jenis: 'lagu', id: t.id, title: t.title, local: Boolean(t.local) } } } }); toast(`“${t.title}” dipakai sebagai suara adzan`); } catch (e) { toast(e.message, { type: 'error' }); }
@@ -72,7 +74,7 @@ export function trackMenu(t, ctx = {}) {
     } },
     t.local && t.path && { label: `Lokasi: ${t.path}`, icon: 'M3 7h6l2 2h10v10H3z', run: () => toast(t.path) },
     !t.local && !t.quran && { label: 'Buka di Google Drive', icon: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5', run: () => window.open(`https://drive.google.com/file/d/${t.id}/view`, '_blank', 'noopener') },
-    !t.local && !t.quran && { label: 'Hapus dari Google Drive', icon: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3', danger: true, run: async () => {
+    !t.local && !t.quran && !store.user?.drive?.readOnly && { label: 'Hapus dari Google Drive', icon: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3', danger: true, run: async () => {
       if (!(await confirmDialog('Hapus dari Google Drive?', `“${t.name || t.title}” akan dipindahkan ke Sampah Google Drive.`, { ok: 'Pindahkan ke Sampah', danger: true }))) return;
       try {
         await del(`/api/library/tracks/${t.id}`);
@@ -131,10 +133,10 @@ export async function addToPlaylistMenu(tracks) {
 /** Pesan kosong / ajakan menghubungkan Drive. */
 function driveGate() {
   const d = store.user?.drive;
-  if (!d?.configured) return emptyState('Google Drive belum diaktifkan', 'Admin server perlu mengisi GOOGLE_CLIENT_ID dan GOOGLE_CLIENT_SECRET.', null);
-  if (!d.connected) return emptyState('Hubungkan Google Drive', 'Pustaka memutar lagu dari folder Google Drive Anda sendiri.', ['Hubungkan di menu Akun', '#/akun']);
-  if (!d.folderId) return emptyState('Atur folder penyimpanan', 'Pilih folder Google Drive tempat lagu Anda disimpan.', ['Atur folder', '#/akun']);
-  return null;
+  if (d?.ready) return null;
+  if (!d?.configured && !d?.linkAvailable) return emptyState('Google Drive belum diaktifkan', 'Admin server perlu mengisi GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET (login Google) atau GOOGLE_API_KEY (link folder).', null);
+  if (!d.connected && d.mode !== 'link') return emptyState('Hubungkan Google Drive', 'Tempel link folder Drive publik, atau login Google untuk sekaligus menyimpan hasil unduhan.', ['Atur di menu Akun', '#/akun']);
+  return emptyState('Atur folder Drive', 'Pilih folder Google Drive tempat lagu Anda disimpan.', ['Atur folder', '#/akun']);
 }
 function emptyState(title, text, cta) {
   return h('div.empty', {}, h('span.empty-ico', {}, icon(I.note)), h('h3', { text: title }), h('p', { text }),
@@ -243,10 +245,10 @@ export async function renderLibrary(view, params) {
     if (ui.source === 'drive' || ui.source === 'semua') {
       const gate = driveGate();
       if (gate && ui.source === 'drive') status.append(gate);
-      else if (gate && d?.configured) {
-        status.append(h('div.local-panel', {}, h('span.muted', { text: d.connected ? 'Folder Google Drive belum diatur.' : 'Google Drive belum dihubungkan.' }),
+      else if (gate && (d?.configured || d?.linkAvailable)) {
+        status.append(h('div.local-panel', {}, h('span.muted', { text: d.connected || d.mode === 'link' ? 'Folder Google Drive belum diatur.' : 'Google Drive belum dihubungkan.' }),
           h('a.btn', { href: '#/akun', text: d.connected ? 'Atur folder' : 'Hubungkan' })));
-      } else if (!gate) status.append(h('p.muted.src-line', {}, icon(I.cloud), ` Google Drive: ${d.folderName}`));
+      } else if (!gate) status.append(h('p.muted.src-line', {}, icon(I.cloud), ` Google Drive: ${d.folderName}${d.readOnly ? ' (link folder · hanya putar)' : ''}`));
     }
     if (ui.source === 'lokal' || ui.source === 'semua') status.append(localPanel(ui.source === 'semua' || localState.status === 'ready'));
   }
@@ -326,20 +328,39 @@ export async function renderLibrary(view, params) {
   return () => offs.forEach((off) => off());
 }
 
+function radioMenu(t) {
+  const st = t.radio;
+  const fav = isFavRadio(st.uuid);
+  actionMenu(h('span.menu-track', {}, cover(t, 'sm'), h('span', {}, h('b', { text: t.title }), h('small', { text: t.artist }))), [
+    { label: fav ? 'Hapus dari favorit radio' : 'Tambah ke favorit radio', icon: I.heart, run: async () => {
+      try { const f = await toggleRadioFav(st); toast(f ? 'Ditambahkan ke favorit radio' : 'Dihapus dari favorit radio'); } catch (e) { toast(e.message, { type: 'error' }); }
+    } },
+    st.homepage && { label: 'Buka situs stasiun', icon: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6', run: () => window.open(st.homepage, '_blank', 'noopener') },
+    { label: 'Lihat semua radio', icon: I.radio, run: () => { location.hash = '#/radio'; } },
+  ].filter(Boolean));
+}
+
 /* ================= Hapalan Quran ================= */
 
 /** Pilih jumlah pengulangan lalu putar surat ayat demi ayat. */
 export function hafalanMenu(t) {
+  const qari = t.id.split('-')[1];
   const run = async (ulang) => {
     try {
-      const qari = t.id.split('-')[1];
       const r = await get(`/api/quran/hafalan/${t.quran.surat}?qari=${qari}&ulang=${ulang}`);
-      playList(r.items, 0, { shuffle: false, source: `Hafalan ${r.surat.namaLatin}` });
-      toast(`Hafalan ${r.surat.namaLatin}: tiap ayat diulang ${ulang}×`);
+      playList(r.items, 0, { shuffle: false, repeat: 'off', source: `Hafalan ${r.surat.namaLatin}` });
+      toast(r.terpotong
+        ? `Hafalan ${r.surat.namaLatin} ayat ${r.dari}–${r.sampai}, tiap ayat ${ulang}×`
+        : `Hafalan ${r.surat.namaLatin}: tiap ayat diulang ${ulang}×`);
     } catch (e) { toast(e.message, { type: 'error' }); }
   };
-  actionMenu(`Hafalan per ayat · ${t.title}`, [1, 3, 5, 7].map((n) => ({ label: n === 1 ? 'Putar per ayat (tanpa ulang)' : `Ulangi tiap ayat ${n}×`, icon: I.refresh, run: () => run(n) })),
-    'Audio diputar ayat demi ayat; teks ayat tampil di panel Lirik.');
+  actionMenu(`Ulangi / hafalan · ${t.title}`, [
+    { label: 'Ulangi surat utuh (tanpa per ayat)', icon: I.refresh, run: () => {
+      playList([t], 0, { shuffle: false, repeat: 'one', source: 'Hapalan Quran' });
+      toast(`${t.title} diulang terus. Matikan lewat tombol ulangi di pemutar.`);
+    } },
+    ...[3, 7, 11, 20, 40].map((n) => ({ label: `Ulangi tiap ayat ${n}×`, icon: I.refresh, run: () => run(n) })),
+  ], 'Teks Arab, Latin & terjemahan tampil di panel Lirik pemutar.');
 }
 
 async function renderQuran(view) {

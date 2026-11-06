@@ -31,6 +31,7 @@ async function gfetch(url, init) {
 }
 
 const isConfigured = () => Boolean(cfg.GOOGLE_CLIENT_ID && cfg.GOOGLE_CLIENT_SECRET);
+const isLink = (user) => user.drive_mode === 'link';
 
 /* ---------- OAuth ---------- */
 function authUrl(user, client) {
@@ -61,6 +62,7 @@ async function tokenRequest(params) {
   return data;
 }
 
+const setMode = db.prepare('UPDATE users SET drive_mode = ? WHERE id = ?');
 const saveGoogle = db.prepare('UPDATE users SET google_refresh_enc = ?, google_email = ? WHERE id = ?');
 const clearGoogle = db.prepare('UPDATE users SET google_refresh_enc = NULL, google_email = NULL WHERE id = ?');
 
@@ -79,6 +81,8 @@ async function handleCallback(code, state) {
     email = about.user?.emailAddress || null;
   } catch { /* tidak fatal */ }
   saveGoogle.run(encrypt(tok.refresh_token), email, user.id);
+  // Login Google → mode penuh. Folder dari mode link tetap dipakai bila akun ini punya izin edit; kalau tidak, pilih ulang.
+  setMode.run('oauth', user.id);
   accessCache.set(user.id, { token: tok.access_token, exp: Date.now() + (tok.expires_in - 60) * 1000 });
   invalidate(user.id);
   return { user: getUser.get(user.id), client: st.client };
@@ -96,6 +100,7 @@ async function disconnect(user) {
     } catch { /* abaikan */ }
   }
   clearGoogle.run(user.id);
+  if (!isLink(user)) setMode.run(null, user.id);
   accessCache.delete(user.id);
   invalidate(user.id);
 }
@@ -121,10 +126,27 @@ async function accessToken(user) {
   }
 }
 
+/** Kredensial baca sesuai mode: { token } (OAuth) atau { key } (API key, folder publik). */
+async function readCred(user) {
+  if (isLink(user)) {
+    if (!cfg.GOOGLE_API_KEY) throw new DriveError('Mode link folder belum diaktifkan admin server (GOOGLE_API_KEY kosong).', 501, 'DRIVE_NOT_CONFIGURED');
+    return { key: cfg.GOOGLE_API_KEY };
+  }
+  return { token: await accessToken(user) };
+}
+const withKey = (url, cred) => (cred.key ? `${url}${url.includes('?') ? '&' : '?'}key=${encodeURIComponent(cred.key)}` : url);
+const credHeaders = (cred) => (cred.token ? { Authorization: `Bearer ${cred.token}` } : {});
+
+/** Menulis ke Drive (simpan hasil unduhan, hapus) hanya bisa dengan login Google. */
+function requireWrite(user) {
+  if (isLink(user)) throw new DriveError('Mode link folder hanya untuk memutar lagu. Untuk menyimpan ke Drive, pilih mode "Login Google" di menu Akun.', 409, 'DRIVE_READ_ONLY');
+}
+
 async function apiJson(token, pathAndQuery, init = {}) {
-  const res = await gfetch(`${API}${pathAndQuery}`, {
+  const cred = typeof token === 'object' && token ? token : { token };
+  const res = await gfetch(withKey(`${API}${pathAndQuery}`, cred), {
     ...init,
-    headers: { Authorization: `Bearer ${token}`, ...(init.headers || {}) },
+    headers: { ...credHeaders(cred), ...(init.headers || {}) },
     signal: init.signal || AbortSignal.timeout(20000),
   });
   if (res.status === 204) return {};
@@ -161,11 +183,43 @@ async function setFolder(user, input) {
   if (f.trashed) throw new DriveError('Folder ada di sampah.', 400);
   if (!f.capabilities?.canAddChildren) throw new DriveError('Akun Google Anda tidak punya izin edit pada folder ini.', 403);
   saveFolder.run(f.id, f.name, user.id);
+  setMode.run('oauth', user.id);
   invalidate(user.id);
   return { id: f.id, name: f.name };
 }
 
+/** Mode link: cukup tempel link folder yang dibagikan "Siapa saja yang memiliki link" (tanpa login Google). */
+async function setLinkFolder(user, input) {
+  if (!cfg.GOOGLE_API_KEY) throw new DriveError('Mode link folder belum diaktifkan admin server (GOOGLE_API_KEY kosong).', 501, 'DRIVE_NOT_CONFIGURED');
+  const id = parseFolderInput(input);
+  if (!id) throw new DriveError('Link atau ID folder Google Drive tidak valid.', 400);
+  let f;
+  try {
+    f = await apiJson({ key: cfg.GOOGLE_API_KEY }, `/drive/v3/files/${id}?fields=id,name,mimeType,trashed&supportsAllDrives=true`);
+  } catch (e) {
+    if (e.status === 404 || e.status === 403) {
+      throw new DriveError('Folder tidak bisa dibaca. Di Google Drive, klik Bagikan → Akses umum → "Siapa saja yang memiliki link", lalu coba lagi.', 404, 'DRIVE_NOT_PUBLIC');
+    }
+    throw e;
+  }
+  if (f.mimeType !== 'application/vnd.google-apps.folder') throw new DriveError('Link tersebut bukan folder.', 400);
+  if (f.trashed) throw new DriveError('Folder ada di sampah.', 400);
+  saveFolder.run(f.id, f.name, user.id);
+  setMode.run('link', user.id);
+  invalidate(user.id);
+  return { id: f.id, name: f.name };
+}
+
+/** Keluar dari mode link (kembali ke login Google bila terhubung). */
+function clearLink(user) {
+  if (!isLink(user)) return;
+  saveFolder.run(null, null, user.id);
+  setMode.run(user.google_refresh_enc ? 'oauth' : null, user.id);
+  invalidate(user.id);
+}
+
 async function createFolder(user, name) {
+  requireWrite(user);
   const token = await accessToken(user);
   const f = await apiJson(token, '/drive/v3/files?fields=id,name', {
     method: 'POST',
@@ -222,8 +276,8 @@ function invalidate(userId) { trackCache.delete(userId); }
 async function listTracks(user, { refresh = false } = {}) {
   const folderId = requireFolder(user);
   const c = trackCache.get(user.id);
-  if (!refresh && c && c.folderId === folderId && Date.now() - c.at < 60000) return c.tracks;
-  const token = await accessToken(user);
+  if (!refresh && c && c.folderId === folderId && c.mode === (user.drive_mode || '') && Date.now() - c.at < 60000) return c.tracks;
+  const token = await readCred(user);
   const tracks = [];
   let pageToken = '';
   do {
@@ -234,7 +288,7 @@ async function listTracks(user, { refresh = false } = {}) {
     (data.files || []).forEach((f) => tracks.push(parseTrack(f)));
     pageToken = data.nextPageToken || '';
   } while (pageToken && tracks.length < 10000);
-  trackCache.set(user.id, { at: Date.now(), folderId, tracks });
+  trackCache.set(user.id, { at: Date.now(), folderId, mode: user.drive_mode || '', tracks });
   return tracks;
 }
 
@@ -243,12 +297,12 @@ const isDriveId = (id) => FILE_ID_RE.test(id) && !id.startsWith('local-');
 
 async function stream(user, fileId, req, res) {
   if (!isDriveId(fileId)) throw new DriveError('ID file tidak valid.', 400);
-  const token = await accessToken(user);
-  const headers = { Authorization: `Bearer ${token}` };
+  const cred = await readCred(user);
+  const headers = { ...credHeaders(cred) };
   if (req.headers.range) headers.Range = req.headers.range;
   const ac = new AbortController();
   req.on('close', () => ac.abort());
-  const up = await gfetch(`${API}/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true&acknowledgeAbuse=true`, { headers, signal: ac.signal });
+  const up = await gfetch(withKey(`${API}/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true${cred.token ? '&acknowledgeAbuse=true' : ''}`, cred), { headers, signal: ac.signal });
   if (!up.ok && up.status !== 206) {
     if (up.status === 416) { res.status(416).end(); return; }
     throw new DriveError(up.status === 404 ? 'File tidak ditemukan di Drive.' : `Gagal membaca file (${up.status}).`, up.status === 404 ? 404 : 502);
@@ -272,6 +326,7 @@ function clipBytes(s, max) {
 }
 
 async function uploadJob(user, job) {
+  requireWrite(user);
   const folderId = requireFolder(user);
   const token = await accessToken(user);
   const mime = job.format === 'mp3' ? 'audio/mpeg' : 'video/mp4';
@@ -314,6 +369,7 @@ async function uploadJob(user, job) {
 
 async function trashFile(user, fileId) {
   if (!isDriveId(fileId)) throw new DriveError('ID file tidak valid.', 400);
+  requireWrite(user);
   const token = await accessToken(user);
   await apiJson(token, `/drive/v3/files/${fileId}?supportsAllDrives=true`, {
     method: 'PATCH',
@@ -325,5 +381,5 @@ async function trashFile(user, fileId) {
 
 module.exports = {
   DriveError, FILE_ID_RE, isConfigured, authUrl, handleCallback, disconnect,
-  setFolder, createFolder, listTracks, stream, uploadJob, trashFile, parseTrack, invalidate,
+  setFolder, setLinkFolder, clearLink, createFolder, listTracks, stream, uploadJob, trashFile, parseTrack, invalidate,
 };

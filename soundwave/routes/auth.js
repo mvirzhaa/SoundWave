@@ -27,6 +27,7 @@ r.get('/config', (req, res) => {
     registration: cfg.ALLOW_REGISTRATION,
     emailDomains: cfg.ALLOWED_EMAIL_DOMAINS,
     driveConfigured: Boolean(cfg.GOOGLE_CLIENT_ID && cfg.GOOGLE_CLIENT_SECRET),
+    driveLink: Boolean(cfg.GOOGLE_API_KEY),
   });
 });
 
