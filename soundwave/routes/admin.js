@@ -10,6 +10,7 @@ const settings = require('../lib/appsettings');
 const Ann = require('../lib/announce');
 const Lyr = require('../lib/lyrics');
 const Y = require('../lib/ytdlp');
+const TV = require('../lib/tv');
 
 const r = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -62,6 +63,20 @@ r.post('/ytdlp/update', admin, wrap(async (req, res) => {
     res.json({ ok: out.ok, before, after, output: out.output });
   } finally { updating = false; }
 }));
+
+/* ---------- TV: saluran pilihan & status daftar iptv-org ---------- */
+const tvErr = (fn) => wrap(async (req, res) => {
+  try { await fn(req, res); } catch (e) { if (e instanceof TV.TvError) return res.status(e.status).json({ error: e.message }); throw e; }
+});
+r.get('/tv', admin, (req, res) => res.json({ saluran: TV.admin.list(), iptv: TV.status() }));
+r.post('/tv', admin, tvErr(async (req, res) => res.json({ saluran: TV.admin.create(req.body || {}) })));
+r.patch('/tv/:id', admin, tvErr(async (req, res) => res.json({ saluran: TV.admin.update(Number(req.params.id), req.body || {}) })));
+r.delete('/tv/:id', admin, (req, res) => { TV.admin.remove(Number(req.params.id)); res.json({ ok: true }); });
+/** Cek siaran langsung kanal YouTube (dipakai tombol "Cek" di panel) */
+r.post('/tv/:id/cek', admin, wrap(async (req, res) => {
+  try { res.json({ ok: true, ...(await TV.ytLive(Number(req.params.id), true)) }); } catch (e) { res.json({ ok: false, error: e.message }); }
+}));
+r.post('/tv-refresh', admin, (req, res) => { TV.refresh(); res.json({ ok: true, iptv: { ...TV.status(), memuat: true } }); });
 
 /* ---------- Pengguna ---------- */
 const qUsers = db.prepare(`SELECT u.id, u.name, u.email, u.created_at, u.last_seen, u.disabled, u.drive_mode,

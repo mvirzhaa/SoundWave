@@ -9,10 +9,10 @@
     "preview": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://soundwave.contoh.ac.id" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://vr.ti.fts.uika-bogor.ac.id/soundwave" }
     },
     "production": {
-      "env": { "EXPO_PUBLIC_API_URL": "https://soundwave.contoh.ac.id" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://vr.ti.fts.uika-bogor.ac.id/soundwave" }
     }
   }
 }

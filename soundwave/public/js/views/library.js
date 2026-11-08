@@ -9,12 +9,41 @@ import { localState, fsaSupported, pickFolder, reconnect, rescan, forgetFolder, 
 
 const TABS = [['lagu', 'Lagu'], ['playlist', 'Playlist'], ['artis', 'Artis'], ['genre', 'Genre']];
 const SORTS = { baru: 'Terbaru', lama: 'Terlama', judul: 'Judul A–Z', judulza: 'Judul Z–A', artis: 'Artis A–Z' };
-let ui = { tab: 'lagu', filter: '', sort: 'baru', source: 'semua' };
+let ui = { tab: 'lagu', filter: '', sort: 'baru', source: 'semua', plView: 'kartu' };
 try { Object.assign(ui, JSON.parse(localStorage.getItem('sw-lib-ui') || '{}'), { filter: '' }); } catch { /* abaikan */ }
-const saveUi = () => { try { localStorage.setItem('sw-lib-ui', JSON.stringify({ tab: ui.tab, sort: ui.sort, source: ui.source })); } catch { /* abaikan */ } };
+const saveUi = () => { try { localStorage.setItem('sw-lib-ui', JSON.stringify({ tab: ui.tab, sort: ui.sort, source: ui.source, plView: ui.plView })); } catch { /* abaikan */ } };
 
 const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
 const byTitle = (a, b) => a.title.localeCompare(b.title, 'id');
+
+/* ================= Penanda playlist ================= */
+
+/** Lagu mana sudah masuk playlist mana (untuk lingkaran inisial di Pustaka). */
+const member = { pls: new Map(), map: {}, seq: 0 };
+export async function loadMembership() {
+  const my = ++member.seq;
+  try {
+    const r = await get('/api/library/playlists/membership');
+    if (my !== member.seq) return;
+    member.pls = new Map(r.playlists.map((p) => [p.id, p]));
+    member.map = r.map;
+    document.querySelectorAll('.track[data-id] .pl-dots').forEach((el) => el.replaceWith(plDots(el.closest('.track').dataset.id)));
+  } catch { /* penanda bersifat tambahan; abaikan bila gagal */ }
+}
+
+function plDots(id) {
+  const pls = (member.map[id] || []).map((pid) => member.pls.get(pid)).filter(Boolean);
+  const box = h('span.pl-dots');
+  if (!pls.length) return box;
+  const names = pls.map((p) => p.name).join(', ');
+  box.title = `Ada di playlist: ${names}`;
+  box.setAttribute('aria-label', `Ada di playlist: ${names}`);
+  box.setAttribute('role', 'img');
+  const shown = pls.length > 3 ? pls.slice(0, 2) : pls;
+  shown.forEach((p) => box.append(h('span.pl-dot', { text: p.initials, style: `--h:${p.hue}`, 'aria-hidden': 'true' })));
+  if (pls.length > 3) box.append(h('span.pl-dot.more', { text: `+${pls.length - 2}`, 'aria-hidden': 'true' }));
+  return box;
+}
 
 /* ================= Komponen ================= */
 
@@ -31,6 +60,7 @@ function trackRow(t, i, ctx) {
   h('span.track-text', {},
     h('b', {}, t.title, t.isVideo ? h('span.badge', { text: 'MP4' }) : null, ctx.showSource && t.local ? h('span.badge.local', { text: 'LOKAL' }) : null),
     h('small', { text: [t.artist, fmtDur(t.duration), t.available === false ? (t.local ? 'tidak ada di folder lokal ini' : 'tidak ada di Drive') : ''].filter(Boolean).join(' · ') })),
+  ctx.playlist || t.quran ? null : plDots(t.id),
   store.favorites.has(t.id) ? h('span.fav-dot', { 'aria-label': 'Favorit' }, icon(I.heart)) : null,
   h('button.icon-btn.track-more', { type: 'button', 'aria-label': 'Menu lagu', onclick: () => trackMenu(t, { ...ctx, index: i }) }, icon(I.more)));
   function play() {
@@ -71,6 +101,7 @@ export function trackMenu(t, ctx = {}) {
     pl && ctx.index < ctx.list.length - 1 && { label: 'Turunkan', icon: 'M12 5v14M6 13l6 6 6-6', run: () => move(pl, ctx.index, 1, ctx) },
     pl && { label: `Hapus dari “${pl.name}”`, icon: 'M5 12h14', run: async () => {
       await del(`/api/library/playlists/${pl.id}/items/${t.itemId}`).catch((e) => toast(e.message, { type: 'error' }));
+      loadMembership();
       ctx.onChange?.();
     } },
     t.local && t.path && { label: `Lokasi: ${t.path}`, icon: 'M3 7h6l2 2h10v10H3z', run: () => toast(t.path) },
@@ -125,13 +156,16 @@ async function move(pl, index, dir, ctx) {
 }
 
 /** Pilih playlist tujuan (atau buat baru) untuk sejumlah lagu. */
-export async function addToPlaylistMenu(tracks) {
+export async function addToPlaylistMenu(tracks, done) {
   let data;
   try { data = await get('/api/library/playlists'); } catch (e) { return toast(e.message, { type: 'error' }); }
   const add = async (p) => {
     try {
       const r = await post(`/api/library/playlists/${p.id}/items`, { tracks });
-      toast(r.added ? `Ditambahkan ke “${p.name}”` : `Sudah ada di “${p.name}”`);
+      loadMembership();
+      if (tracks.length > 1) toast(r.added ? `${r.added} lagu ditambahkan ke “${p.name}”${r.skipped ? ` (${r.skipped} sudah ada)` : ''}` : `Semua lagu sudah ada di “${p.name}”`);
+      else toast(r.added ? `Ditambahkan ke “${p.name}”` : `Sudah ada di “${p.name}”`);
+      done?.();
     } catch (e) { toast(e.message, { type: 'error' }); }
   };
   actionMenu('Tambah ke playlist', [
@@ -212,6 +246,7 @@ function localPanel(compact) {
 }
 
 export async function renderLibrary(view, params) {
+  loadMembership(); // penanda playlist selalu segar saat Pustaka dibuka
   if (params.get('tab')) ui.tab = params.get('tab');
   if (params.get('sumber')) ui.source = params.get('sumber');
   const page = h('section.page');
@@ -268,6 +303,7 @@ export async function renderLibrary(view, params) {
   }
 
   async function draw() {
+    exitSelect();
     drawStatus();
     sortSel.hidden = ui.tab !== 'lagu';
     filter.placeholder = { lagu: 'Cari judul, artis, album…', playlist: 'Cari playlist…', artis: 'Cari artis…', genre: 'Cari genre…' }[ui.tab];
@@ -297,7 +333,9 @@ export async function renderLibrary(view, params) {
       else if (ui.sort === 'lama') list.sort((a, b) => addedAt(a) - addedAt(b));
       else if (ui.sort === 'artis') list.sort((a, b) => a.artist.localeCompare(b.artist, 'id') || byTitle(a, b));
       else list.sort((a, b) => addedAt(b) - addedAt(a));
-      body.append(h('p.count', { text: `${list.length} lagu` }), trackList(list, { source: ui.source === 'lokal' ? 'Folder lokal' : 'Semua lagu', onChange: draw, showSource: mixed }));
+      const box = trackList(list, { source: ui.source === 'lokal' ? 'Folder lokal' : 'Semua lagu', onChange: draw, showSource: mixed });
+      enableSelect(box, list);
+      body.append(h('p.count', {}, `${list.length} lagu`, h('span.hint-inline', { text: ' · tekan lama untuk memilih beberapa' })), box);
     } else {
       const key = ui.tab === 'artis' ? 'artist' : 'genre';
       const groups = new Map();
@@ -319,20 +357,39 @@ export async function renderLibrary(view, params) {
     let data;
     try { data = await get('/api/library/playlists'); } catch (e) { box.append(h('p.state.err', { text: e.message })); return; }
     const f = norm(ui.filter);
+    const all = [...data.special, ...data.playlists].filter((p) => !f || norm(p.name).includes(f));
+    const asList = ui.plView === 'daftar';
+    const newPl = async () => {
+      const name = await promptDialog('Playlist baru', { placeholder: 'Nama playlist', ok: 'Buat' });
+      if (!name) return;
+      try { const p = await post('/api/library/playlists', { name }); location.hash = `#/playlist/${p.id}`; } catch (e) { toast(e.message, { type: 'error' }); }
+    };
+    const art = (p, size) => (p.quran ? h(`span.cover.${size}.gen.quran-cover`, {}, h('span.qnum', { text: 'القرآن', lang: 'ar' }))
+      : collage(p.covers, size, p.id === 'favorites' ? I.heart : p.id === 'recent' ? I.clock : I.note));
+    const sub = (p) => `${p.count} ${p.quran ? 'surat' : 'lagu'}`;
+
+    // Pilihan tampilan: kartu / daftar (diingat di browser ini)
+    const viewBtn = (mode, label, path) => h(`button.seg-btn${ui.plView === mode ? '.on' : ''}`, {
+      type: 'button', 'aria-pressed': String(ui.plView === mode), title: label, 'aria-label': `Tampilan ${label}`,
+      onclick: () => { if (ui.plView === mode) return; ui.plView = mode; saveUi(); drawPlaylists(box); },
+    }, icon(path), h('span', { text: label }));
+    box.append(h('div.pl-head', {}, h('p.count', { text: `${all.length} playlist` }),
+      h('div.seg', { role: 'group', 'aria-label': 'Tampilan playlist' },
+        viewBtn('kartu', 'Kartu', 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'),
+        viewBtn('daftar', 'Daftar', 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01'))));
+
+    if (asList) {
+      const list = h('div.groups.pl-list');
+      list.append(h('button.group.pl-new-row', { type: 'button', onclick: newPl },
+        h('span.cover.sm.gen.plus', {}, icon(I.plus)), h('span.track-text', {}, h('b', { text: 'Playlist baru' }))));
+      all.forEach((p) => list.append(h('a.group', { href: `#/playlist/${p.id}` }, art(p, 'sm'),
+        h('span.track-text', {}, h('b', { text: p.name }), h('small', { text: sub(p) })))));
+      box.append(list);
+      return;
+    }
     const grid = h('div.pl-grid');
-    grid.append(h('button.pl-card.new', {
-      type: 'button',
-      onclick: async () => {
-        const name = await promptDialog('Playlist baru', { placeholder: 'Nama playlist', ok: 'Buat' });
-        if (!name) return;
-        try { const p = await post('/api/library/playlists', { name }); location.hash = `#/playlist/${p.id}`; } catch (e) { toast(e.message, { type: 'error' }); }
-      },
-    }, h('span.cover.md.gen.plus', {}, icon(I.plus)), h('b', { text: 'Playlist baru' })));
-    [...data.special, ...data.playlists].filter((p) => !f || norm(p.name).includes(f)).forEach((p) => grid.append(
-      h('a.pl-card', { href: `#/playlist/${p.id}` },
-        p.quran ? h('span.cover.md.gen.quran-cover', {}, h('span.qnum', { text: 'القرآن', lang: 'ar' }))
-          : collage(p.covers, 'md', p.id === 'favorites' ? I.heart : p.id === 'recent' ? I.clock : I.note),
-        h('b', { text: p.name }), h('small', { text: `${p.count} ${p.quran ? 'surat' : 'lagu'}` }))));
+    grid.append(h('button.pl-card.new', { type: 'button', onclick: newPl }, h('span.cover.md.gen.plus', {}, icon(I.plus)), h('b', { text: 'Playlist baru' })));
+    all.forEach((p) => grid.append(h('a.pl-card', { href: `#/playlist/${p.id}` }, art(p, 'md'), h('b', { text: p.name }), h('small', { text: sub(p) }))));
     box.append(grid);
   }
 
@@ -454,11 +511,12 @@ export async function renderPlaylist(view, id) {
     const menuBtn = !p.special ? h('button.icon-btn', { type: 'button', 'aria-label': 'Menu playlist', onclick: () => actionMenu(p.name, [
       { label: 'Ubah nama', icon: 'M4 20h4L19 9l-4-4L4 16z', run: async () => {
         const name = await promptDialog('Ubah nama playlist', { value: p.name });
-        if (name) { await patch(`/api/library/playlists/${p.id}`, { name }).catch((e) => toast(e.message, { type: 'error' })); reload(); }
+        if (name) { await patch(`/api/library/playlists/${p.id}`, { name }).catch((e) => toast(e.message, { type: 'error' })); reload(); loadMembership(); }
       } },
       { label: 'Hapus playlist', icon: 'M4 7h16M6 7l1 13h10l1-13M9 7V4h6v3', danger: true, run: async () => {
         if (!(await confirmDialog('Hapus playlist?', `Playlist “${p.name}” akan dihapus. Lagu di Google Drive tidak ikut terhapus.`, { ok: 'Hapus', danger: true }))) return;
         await del(`/api/library/playlists/${p.id}`).catch((e) => toast(e.message, { type: 'error' }));
+        loadMembership();
         location.hash = '#/pustaka?tab=playlist';
       } },
     ]) }, icon(I.more)) : null;
@@ -491,31 +549,172 @@ export async function renderPlaylist(view, id) {
   await reload();
 }
 
-/** Drag & drop untuk mengurutkan lagu dalam playlist (desktop). */
+/**
+ * Urutkan lagu playlist dengan seret: tahan baris ±0,4 detik (layar sentuh / mouse) atau tarik pegangan ⠿,
+ * lalu geser ke posisi baru dan lepaskan. Urutan disimpan ke server.
+ */
 function enableDrag(list, p, reload) {
-  let dragEl = null;
-  list.querySelectorAll('.track').forEach((row) => {
-    const handle = row.querySelector('.drag');
-    handle.addEventListener('pointerdown', () => { row.draggable = true; });
-    row.addEventListener('dragstart', (e) => { dragEl = row; row.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
-    row.addEventListener('dragend', async () => {
-      row.classList.remove('dragging'); row.draggable = false; dragEl = null;
-      const order = [...list.querySelectorAll('.track')].map((r) => p.items.find((x) => x.id === r.dataset.id)?.itemId);
-      await put(`/api/library/playlists/${p.id}/order`, { itemIds: order }).catch((e) => toast(e.message, { type: 'error' }));
-      reload();
-    });
-    row.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      if (!dragEl || dragEl === row) return;
-      const r = row.getBoundingClientRect();
-      list.insertBefore(dragEl, e.clientY < r.top + r.height / 2 ? row : row.nextSibling);
-    });
+  let drag = null; // { row, startOrder }
+  let timer = null;
+  let start = null;
+  let blockClick = false;
+  const rows = () => [...list.querySelectorAll('.track')];
+  const order = () => rows().map((r) => r.dataset.id).join(',');
+
+  const begin = (row) => {
+    clearTimeout(timer); timer = null;
+    drag = { row, startOrder: order() };
+    row.classList.add('dragging');
+    list.classList.add('is-dragging');
+    navigator.vibrate?.(15);
+  };
+  const move = (y) => {
+    if (!drag) return;
+    for (const r of rows()) {
+      if (r === drag.row) continue;
+      const b = r.getBoundingClientRect();
+      if (y > b.top && y < b.bottom) {
+        list.insertBefore(drag.row, y < b.top + b.height / 2 ? r : r.nextSibling);
+        break;
+      }
+    }
+    // Gulir otomatis bila jari/kursor dekat tepi layar
+    const edge = 70;
+    if (y < edge) window.scrollBy(0, -12); else if (y > window.innerHeight - edge - 120) window.scrollBy(0, 12);
+  };
+  const finish = async () => {
+    clearTimeout(timer); timer = null; start = null;
+    if (!drag) return;
+    const { row, startOrder } = drag;
+    drag = null;
+    row.classList.remove('dragging');
+    list.classList.remove('is-dragging');
+    blockClick = true; setTimeout(() => { blockClick = false; }, 350);
+    if (order() === startOrder) return;
+    const ids = rows().map((r) => p.items.find((x) => x.id === r.dataset.id)?.itemId).filter((x) => x != null);
+    try { await put(`/api/library/playlists/${p.id}/order`, { itemIds: ids }); toast('Urutan disimpan'); }
+    catch (e) { toast(e.message, { type: 'error' }); }
+    reload();
+  };
+
+  // Klik setelah menyeret tidak boleh memutar lagu
+  list.addEventListener('click', (e) => { if (blockClick || drag) { e.stopPropagation(); e.preventDefault(); } }, true);
+  list.addEventListener('contextmenu', (e) => { if (e.target.closest('.track')) e.preventDefault(); });
+
+  /* Sentuh */
+  list.addEventListener('touchstart', (e) => {
+    const row = e.target.closest('.track');
+    if (!row || e.target.closest('.track-more') || e.touches.length > 1) return;
+    start = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if (e.target.closest('.drag')) { begin(row); return; }
+    timer = setTimeout(() => begin(row), 420);
+  }, { passive: true });
+  list.addEventListener('touchmove', (e) => {
+    const t = e.touches[0];
+    if (drag) { e.preventDefault(); move(t.clientY); return; } // cegah halaman ikut menggulir
+    if (timer && start && Math.hypot(t.clientX - start.x, t.clientY - start.y) > 10) { clearTimeout(timer); timer = null; }
+  }, { passive: false });
+  list.addEventListener('touchend', (e) => { if (drag) e.preventDefault(); finish(); });
+  list.addEventListener('touchcancel', finish);
+
+  /* Mouse */
+  list.addEventListener('mousedown', (e) => {
+    const row = e.target.closest('.track');
+    if (e.button !== 0 || !row || e.target.closest('.track-more')) return;
+    start = { x: e.clientX, y: e.clientY };
+    if (e.target.closest('.drag')) { e.preventDefault(); begin(row); } else timer = setTimeout(() => begin(row), 420);
+    const mm = (ev) => {
+      if (drag) { ev.preventDefault(); move(ev.clientY); return; }
+      if (timer && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > 6) { clearTimeout(timer); timer = null; }
+    };
+    const mu = () => { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); finish(); };
+    document.addEventListener('mousemove', mm);
+    document.addEventListener('mouseup', mu);
   });
+}
+
+/* ================= Pilih banyak lagu ================= */
+
+/**
+ * Tekan lama sebuah lagu → mode pilih. Ketuk lagu lain untuk menambah/membatalkan pilihan, lalu
+ * "Tambah ke playlist" (atau antrean) untuk semua lagu terpilih sekaligus.
+ */
+let sel = null; // { box, tracks, ids: Set, bar, count }
+function exitSelect() {
+  if (!sel) return;
+  sel.box.classList.remove('selecting');
+  sel.box.querySelectorAll('.track.selected').forEach((r) => r.classList.remove('selected'));
+  sel.bar.remove();
+  document.body.classList.remove('has-selbar');
+  sel = null;
+}
+window.addEventListener('hashchange', exitSelect);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && sel) exitSelect(); });
+
+function selToggle(id, force) {
+  if (!sel) return;
+  const on = force ?? !sel.ids.has(id);
+  if (on) sel.ids.add(id); else sel.ids.delete(id);
+  sel.box.querySelector(`.track[data-id="${CSS.escape(id)}"]`)?.classList.toggle('selected', on);
+  sel.count.textContent = `${sel.ids.size} dipilih`;
+  if (!sel.ids.size) exitSelect();
+}
+
+function startSelect(box, tracks, firstId) {
+  if (sel && sel.box !== box) exitSelect();
+  if (!sel) {
+    const count = h('b.selbar-count');
+    const chosen = () => tracks.filter((t) => sel.ids.has(t.id) && !t.quran);
+    const bar = h('div.selbar', { role: 'toolbar', 'aria-label': 'Lagu terpilih' },
+      h('button.icon-btn', { type: 'button', 'aria-label': 'Batal memilih', onclick: exitSelect }, icon('M6 6l12 12M18 6 6 18')),
+      count,
+      h('button.icon-btn', { type: 'button', title: 'Pilih semua', 'aria-label': 'Pilih semua / batalkan semua', onclick: () => {
+        const all = sel.ids.size < tracks.length;
+        tracks.forEach((t) => selToggle(t.id, all || undefined));
+        if (!all) exitSelect();
+      } }, icon('M4 6l2 2 4-4M4 14l2 2 4-4M13 6h7M13 14h7M13 19h7')),
+      h('button.btn.sm', { type: 'button', text: 'Antrean', onclick: () => {
+        const list = chosen(); list.forEach((t) => addToQueue(t)); toast(`${list.length} lagu ditambahkan ke antrean`); exitSelect();
+      } }),
+      h('button.btn-primary.sm', { type: 'button', onclick: async () => {
+        const list = chosen();
+        if (!list.length) return toast('Pilih lagu dulu.');
+        await addToPlaylistMenu(list, exitSelect);
+      } }, icon(I.plus), 'Playlist'));
+    document.body.append(bar);
+    document.body.classList.add('has-selbar');
+    box.classList.add('selecting');
+    sel = { box, tracks, ids: new Set(), bar, count };
+  }
+  selToggle(firstId, true);
+}
+
+function enableSelect(box, tracks) {
+  let timer = null; let start = null; let fired = false;
+  const cancel = () => { clearTimeout(timer); timer = null; };
+  box.addEventListener('pointerdown', (e) => {
+    const row = e.target.closest('.track');
+    if (!row || e.target.closest('.track-more') || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    fired = false; start = { x: e.clientX, y: e.clientY };
+    timer = setTimeout(() => { fired = true; timer = null; navigator.vibrate?.(15); startSelect(box, tracks, row.dataset.id); }, 450);
+  });
+  box.addEventListener('pointermove', (e) => { if (timer && start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) cancel(); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => box.addEventListener(ev, cancel));
+  box.addEventListener('contextmenu', (e) => { if (e.target.closest('.track')) e.preventDefault(); });
+  // Di mode pilih, ketukan memilih (bukan memutar); Ctrl/⌘-klik juga langsung memilih
+  box.addEventListener('click', (e) => {
+    const row = e.target.closest('.track');
+    if (!row || e.target.closest('.track-more')) return;
+    if (fired) { fired = false; e.stopPropagation(); e.preventDefault(); return; }
+    if (sel?.box === box) { e.stopPropagation(); e.preventDefault(); selToggle(row.dataset.id); return; }
+    if (e.ctrlKey || e.metaKey) { e.stopPropagation(); e.preventDefault(); startSelect(box, tracks, row.dataset.id); }
+  }, true);
 }
 
 /* ================= Detail artis / genre ================= */
 
 export async function renderGroup(view, kind, name) {
+  loadMembership();
   const page = h('section.page');
   view.append(page);
   if (driveReady() && !store.tracks) {
@@ -537,6 +736,6 @@ export async function renderGroup(view, kind, name) {
           h('button.btn-primary', { type: 'button', onclick: () => playList(list, 0, { shuffle: false, source: name }) }, icon(I.play), 'Putar'),
           h('button.btn', { type: 'button', onclick: () => playList(list, null, { shuffle: true, source: name }) }, icon(I.shuffle), 'Acak'),
           h('button.btn', { type: 'button', onclick: () => addToPlaylistMenu(list) }, icon(I.plus), 'Ke playlist')))),
-    list.length ? trackList(list, { source: name, showSource: true, onChange: () => { view.textContent = ''; renderGroup(view, kind, name); } }) : h('p.state', { text: 'Tidak ada lagu.' }),
+    list.length ? (() => { const box = trackList(list, { source: name, showSource: true, onChange: () => { view.textContent = ''; renderGroup(view, kind, name); } }); enableSelect(box, list); return box; })() : h('p.state', { text: 'Tidak ada lagu.' }),
   );
 }

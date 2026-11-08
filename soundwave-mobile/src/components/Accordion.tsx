@@ -19,12 +19,14 @@ type Props = {
   title: string;
   summary?: string;
   defaultOpen?: boolean;
+  /** Paksa terbuka (mis. dibuka lewat tautan dari layar lain) */
+  force?: boolean;
   children: React.ReactNode;
 };
 
-export function Accordion({ id, icon, title, summary, defaultOpen = false, children }: Props) {
-  const [open, setOpen] = useState<boolean>(memo?.[id] ?? defaultOpen);
-  useEffect(() => { readAll().then((m) => { if (m[id] != null) setOpen(m[id]); }); }, [id]);
+export function Accordion({ id, icon, title, summary, defaultOpen = false, force, children }: Props) {
+  const [open, setOpen] = useState<boolean>(force || (memo?.[id] ?? defaultOpen));
+  useEffect(() => { if (force) { setOpen(true); return; } readAll().then((m) => { if (m[id] != null) setOpen(m[id]); }); }, [id, force]);
   const toggle = () => {
     LayoutAnimation.configureNext(LayoutAnimation.create(180, 'easeInEaseOut', 'opacity'));
     const next = !open;

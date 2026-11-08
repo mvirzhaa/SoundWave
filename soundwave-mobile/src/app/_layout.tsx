@@ -63,6 +63,8 @@ function RootStack() {
             <Stack.Screen name="quran" options={{ title: T('Hapalan Quran') }} />
             <Stack.Screen name="surat/[n]" options={{ title: '' }} />
             <Stack.Screen name="pengumuman" options={{ title: T('Pengumuman') }} />
+            <Stack.Screen name="sholat" options={{ title: T('Jadwal Sholat') }} />
+            <Stack.Screen name="tv-player" options={{ presentation: 'fullScreenModal', headerShown: false, animation: 'slide_from_bottom', orientation: 'all' }} />
           </Stack.Protected>
         </Stack>
         {user ? <StackMini /> : null}

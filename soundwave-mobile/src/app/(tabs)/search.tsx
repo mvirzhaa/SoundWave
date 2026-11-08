@@ -30,22 +30,37 @@ export default function SearchScreen() {
   const player = usePlayer();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abort = useRef<AbortController | null>(null);
+  /** Kata kunci yang sudah dicari — saran tidak dimunculkan lagi untuk kata ini (agar tidak menutupi hasil). */
+  const searched = useRef('');
+
+  const closeSugg = () => {
+    if (timer.current) clearTimeout(timer.current);
+    abort.current?.abort();
+    setSugg([]);
+  };
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
     const term = q.trim();
-    if (term.length < 2 || /^https?:\/\//i.test(term)) { setSugg([]); return; }
+    if (term.length < 2 || /^https?:\/\//i.test(term) || term === searched.current) { setSugg([]); return; }
     timer.current = setTimeout(async () => {
       abort.current?.abort();
-      abort.current = new AbortController();
-      try { setSugg(await get<string[]>(`/api/suggest?q=${encodeURIComponent(term)}`, { signal: abort.current.signal })); } catch { /* abaikan */ }
+      const ac = new AbortController();
+      abort.current = ac;
+      try {
+        const list = await get<string[]>(`/api/suggest?q=${encodeURIComponent(term)}`, { signal: ac.signal });
+        // Jawaban saran yang datang terlambat (setelah pengguna menekan cari) diabaikan
+        if (!ac.signal.aborted && searched.current !== term) setSugg(list);
+      } catch { /* abaikan */ }
     }, 200);
   }, [q]);
 
   const search = async (term: string) => {
     if (!term.trim()) return;
     Keyboard.dismiss();
-    setQ(term); setSugg([]); setErr(''); setLoading(true); setOpen(null); setPreview(null);
+    searched.current = term.trim();
+    closeSugg();
+    setQ(term); setErr(''); setLoading(true); setOpen(null); setPreview(null);
     try {
       const r = await get<{ results: SearchResult[] }>(`/api/search?q=${encodeURIComponent(term.trim())}`, { timeout: 45000 });
       setResults(r.results);
@@ -58,7 +73,7 @@ export default function SearchScreen() {
         <Ionicons name="search" size={20} color={C.muted} />
         <TextInput style={s.input} value={q} onChangeText={setQ} placeholder={T("Judul lagu, artis, atau link YouTube")}
           placeholderTextColor={C.muted} returnKeyType="search" onSubmitEditing={() => search(q)} autoCorrect={false} />
-        {q ? <Pressable onPress={() => { setQ(''); setSugg([]); }} hitSlop={8}><Ionicons name="close-circle" size={20} color={C.muted} /></Pressable> : null}
+        {q ? <Pressable onPress={() => { searched.current = ''; setQ(''); closeSugg(); }} hitSlop={8}><Ionicons name="close-circle" size={20} color={C.muted} /></Pressable> : null}
       </View>
 
       {sugg.length ? (
@@ -87,6 +102,7 @@ export default function SearchScreen() {
           data={results}
           keyExtractor={(r) => r.id}
           keyboardShouldPersistTaps="handled"
+          onScrollBeginDrag={() => { if (sugg.length) closeSugg(); }}
           contentContainerStyle={{ paddingBottom: 24 }}
           ListEmptyComponent={<Text style={s.err}>{T('Tidak ada hasil.')}</Text>}
           renderItem={({ item }) => (
@@ -179,7 +195,7 @@ function ConvertPanel({ item }: { item: SearchResult }) {
     if (!job) return;
     setBusy('drive');
     try {
-      const r = await post<{ link: string }>(`/api/jobs/${job.id}/drive`);
+      const r = await post<{ link: string }>(`/api/jobs/${job.id}/drive`, {}, { timeout: 15 * 60000 }); // unggah file besar ke Drive bisa lama
       setDriveLink(r.link);
       ui.toast(T('Tersimpan ke Google Drive'));
       lib.load(true);

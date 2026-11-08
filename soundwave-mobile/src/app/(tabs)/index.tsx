@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { T } from '../../lib/i18n';
-import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, BackHandler, FlatList, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
@@ -31,6 +31,8 @@ const SORTS: [Sort, string, keyof typeof Ionicons.glyphMap][] = [
   ['az', 'Judul A–Z', 'text-outline'], ['za', 'Judul Z–A', 'text-outline'], ['artis', 'Artis A–Z', 'person-outline'],
 ];
 const SORT_KEY = 'sw-lib-sort';
+const PLVIEW_KEY = 'sw-pl-view';
+type PlView = 'kartu' | 'daftar';
 const byTitle = (a: Track, b: Track) => (a.title || '').localeCompare(b.title || '', 'id', { sensitivity: 'base', numeric: true });
 const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
 const addedAt = (t: Track & { createdTime?: string }) => (t.createdTime ? Date.parse(t.createdTime) : t.added || 0);
@@ -48,6 +50,24 @@ export default function LibraryScreen() {
   const [sort, setSortState] = useState<Sort>('baru');
   useEffect(() => { SecureStore.getItemAsync(SORT_KEY).then((v) => { if (v && SORTS.some(([k]) => k === v)) setSortState(v as Sort); }).catch(() => {}); }, []);
   const setSort = (v: Sort) => { setSortState(v); SecureStore.setItemAsync(SORT_KEY, v).catch(() => {}); };
+  // Tampilan tab Playlist: kartu / daftar (pilihan terakhir diingat)
+  const [plView, setPlViewState] = useState<PlView>('kartu');
+  useEffect(() => { SecureStore.getItemAsync(PLVIEW_KEY).then((v) => { if (v === 'kartu' || v === 'daftar') setPlViewState(v); }).catch(() => {}); }, []);
+  const setPlView = (v: PlView) => { setPlViewState(v); SecureStore.setItemAsync(PLVIEW_KEY, v).catch(() => {}); };
+  // Pilih banyak lagu (tekan lama sebuah lagu)
+  const [sel, setSel] = useState<Set<string> | null>(null);
+  useEffect(() => { setSel(null); }, [tab, src, filter, offlineOnly]);
+  useEffect(() => {
+    if (!sel) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { setSel(null); return true; });
+    return () => sub.remove();
+  }, [sel]);
+  useFocusEffect(useCallback(() => () => setSel(null), []));
+  const toggleSel = (id: string) => setSel((cur) => {
+    const n = new Set(cur || []);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n.size ? n : null;
+  });
   const [playlists, setPlaylists] = useState<{ special: PlaylistSummary[]; playlists: PlaylistSummary[] } | null>(null);
   const { width } = useWindowDimensions();
 
@@ -252,20 +272,51 @@ export default function LibraryScreen() {
             <Text style={{ color: C.accent, fontWeight: '700' }}>{plLoading ? '…' : T('Coba lagi')}</Text>
           </Pressable>
         ) : null}
-        <View style={[s.grid, { gap: 14 }]}>
-          <Pressable onPress={createPl} style={{ width: size }}>
-            <View style={[s.newPl, { width: size, height: size }]}><Ionicons name="add" size={44} color={C.accent} /></View>
-            <Text style={s.plName}>{T('Playlist baru')}</Text>
-          </Pressable>
-          {all.map((p) => (
-            <Pressable key={String(p.id)} style={{ width: size }} onPress={() => router.push(p.quran ? '/quran' : `/playlist/${p.id}`)}>
-              {p.quran ? <Cover quran="القرآن" size={size} radius={14} />
-                : <Collage ids={p.covers} size={size} icon={p.id === 'favorites' ? 'heart' : p.id === 'recent' ? 'time-outline' : 'musical-notes'} />}
-              <Text style={s.plName} numberOfLines={1}>{p.special ? T(p.name) : p.name}</Text>
-              <Text style={s.plCount}>{p.count} {p.quran ? T('surat') : T('lagu')}</Text>
-            </Pressable>
-          ))}
+        <View style={s.plHead}>
+          <Text style={s.count}>{T('{n} playlist', { n: all.length })}</Text>
+          <View style={s.seg}>
+            {([['kartu', 'grid-outline', 'Kartu'], ['daftar', 'list-outline', 'Daftar']] as const).map(([k, ic, label]) => (
+              <Pressable key={k} onPress={() => setPlView(k)} style={[s.segBtn, plView === k && s.segOn]} accessibilityLabel={T('Tampilan {v}', { v: T(label) })} accessibilityState={{ selected: plView === k }}>
+                <Ionicons name={ic} size={16} color={plView === k ? C.accent : C.muted} />
+                <Text style={[s.segText, plView === k && { color: C.accent }]}>{T(label)}</Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
+        {plView === 'daftar' ? (
+          <View>
+            <Pressable style={s.group} onPress={createPl}>
+              <View style={[s.newPl, { width: 52, height: 52, borderRadius: 10 }]}><Ionicons name="add" size={26} color={C.accent} /></View>
+              <Text style={[s.groupName, { flex: 1 }]}>{T('Playlist baru')}</Text>
+            </Pressable>
+            {all.map((p) => (
+              <Pressable key={String(p.id)} style={s.group} onPress={() => router.push(p.quran ? '/quran' : `/playlist/${p.id}`)}>
+                {p.quran ? <Cover quran="القرآن" size={52} radius={10} />
+                  : <Collage ids={p.covers} size={52} radius={10} icon={p.id === 'favorites' ? 'heart' : p.id === 'recent' ? 'time-outline' : 'musical-notes'} />}
+                <View style={{ flex: 1 }}>
+                  <Text style={s.groupName} numberOfLines={1}>{p.special ? T(p.name) : p.name}</Text>
+                  <Text style={s.plCount}>{p.count} {p.quran ? T('surat') : T('lagu')}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={C.muted} />
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <View style={[s.grid, { gap: 14 }]}>
+            <Pressable onPress={createPl} style={{ width: size }}>
+              <View style={[s.newPl, { width: size, height: size }]}><Ionicons name="add" size={44} color={C.accent} /></View>
+              <Text style={s.plName}>{T('Playlist baru')}</Text>
+            </Pressable>
+            {all.map((p) => (
+              <Pressable key={String(p.id)} style={{ width: size }} onPress={() => router.push(p.quran ? '/quran' : `/playlist/${p.id}`)}>
+                {p.quran ? <Cover quran="القرآن" size={size} radius={14} />
+                  : <Collage ids={p.covers} size={size} icon={p.id === 'favorites' ? 'heart' : p.id === 'recent' ? 'time-outline' : 'musical-notes'} />}
+                <Text style={s.plName} numberOfLines={1}>{p.special ? T(p.name) : p.name}</Text>
+                <Text style={s.plCount}>{p.count} {p.quran ? T('surat') : T('lagu')}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
       </ScrollView>
     );
   }
@@ -299,15 +350,33 @@ export default function LibraryScreen() {
   }
 
   /* ---- Tab Lagu ---- */
+  const chosen = () => list.filter((t) => sel?.has(t.id) && !t.quran);
+  const selBar = sel ? (
+    <View style={s.selBar}>
+      <Pressable hitSlop={8} onPress={() => setSel(null)} accessibilityLabel={T('Batal memilih')}><Ionicons name="close" size={24} color={C.text} /></Pressable>
+      <Text style={s.selCount} numberOfLines={1}>{T('{n} dipilih', { n: sel.size })}</Text>
+      <Pressable hitSlop={8} onPress={() => setSel(sel.size < list.length ? new Set(list.map((t) => t.id)) : null)} accessibilityLabel={T('Pilih semua')}>
+        <Ionicons name={sel.size < list.length ? 'checkmark-done-outline' : 'remove-circle-outline'} size={22} color={C.text} />
+      </Pressable>
+      <Pressable style={s.selBtn} onPress={() => { const c = chosen(); (async () => { for (const t of c) await player.addToQueue(t); })().catch(() => {}); ui.toast(T('{n} lagu ditambahkan ke antrean', { n: c.length })); setSel(null); }}>
+        <Text style={s.selBtnText}>{T('Antrean')}</Text>
+      </Pressable>
+      <Pressable style={[s.selBtn, s.selPrimary]} onPress={() => { const c = chosen(); if (!c.length) return; menu.addToPlaylist(c, () => setSel(null)); }}>
+        <Ionicons name="add" size={18} color="#fff" />
+        <Text style={[s.selBtnText, { color: '#fff' }]}>{T('Playlist')}</Text>
+      </Pressable>
+    </View>
+  ) : null;
   return (
     <View style={{ flex: 1 }}>
+      {selBar}
       <FlatList
         data={list}
         keyExtractor={(t) => t.id}
         refreshControl={refresh}
         ListHeaderComponent={<>{header}{list.length ? (
           <View style={s.countRow}>
-            <Text style={s.count}>{list.length} {T('lagu')}</Text>
+            <Text style={s.count} numberOfLines={1}>{list.length} {T('lagu')}<Text style={{ opacity: 0.7 }}>{sel ? '' : T(' · tahan untuk memilih')}</Text></Text>
             <Pressable onPress={sortMenu} style={s.sortBtn} hitSlop={8} accessibilityLabel={T('Urutkan lagu')}>
               <Ionicons name="swap-vertical" size={16} color={C.accent} />
               <Text style={s.sortText}>{sortLabel}</Text>
@@ -320,13 +389,16 @@ export default function LibraryScreen() {
         ListEmptyComponent={empty}
         renderItem={({ item, index }) => (
           <TrackRow track={item} active={player.current?.id === item.id} favorite={lib.favorites.has(item.id)} showSource={src === 'semua'}
-            onPress={() => player.playList(list, index, { source: src === 'hp' ? 'Musik di HP' : offlineOnly ? T('Offline') : T('Semua lagu') })}
+            showPlaylists
+            selected={sel ? sel.has(item.id) : undefined}
+            onLongPress={() => toggleSel(item.id)}
+            onPress={() => (sel ? toggleSel(item.id) : player.playList(list, index, { source: src === 'hp' ? 'Musik di HP' : offlineOnly ? T('Offline') : T('Semua lagu') }))}
             onMore={() => menu.open(item, { list, index })}
             onOffline={item.local ? undefined : () => toggleOffline(item)} />
         )}
-        extraData={`${player.current?.id}-${lib.offlineVersion}-${lib.favorites.size}`}
+        extraData={`${player.current?.id}-${lib.offlineVersion}-${lib.favorites.size}-${sel ? [...sel].join(',') : ''}`}
       />
-      {list.length ? (
+      {list.length && !sel ? (
         <Pressable style={s.fab} onPress={() => player.playList(list, null, { shuffle: true, source: 'Acak semua' })} accessibilityLabel={T("Putar acak")}>
           <Ionicons name="shuffle" size={26} color="#fff" />
         </Pressable>
@@ -336,6 +408,16 @@ export default function LibraryScreen() {
 }
 
 const s = themed(() => StyleSheet.create({
+  plHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 14, marginBottom: 8 },
+  seg: { flexDirection: 'row', padding: 3, borderRadius: 999, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
+  segBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 999 },
+  segOn: { backgroundColor: C.surface2 },
+  segText: { color: C.muted, fontWeight: '700', fontSize: 13 },
+  selBar: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 10, marginBottom: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: C.accent, backgroundColor: C.surface },
+  selCount: { flex: 1, color: C.text, fontWeight: '800', fontSize: 15 },
+  selBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: C.border },
+  selPrimary: { backgroundColor: C.accent, borderColor: C.accent },
+  selBtnText: { color: C.text, fontWeight: '700', fontSize: 13 },
   plErr: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 14, marginBottom: 12, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
   sources: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingTop: 4, paddingBottom: 10 },
   srcChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },

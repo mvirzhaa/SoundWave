@@ -19,6 +19,7 @@ const DEFAULTS = {
   },
   quran: { qari: '05', semua: false },
   radio: { favorit: [] }, // stasiun favorit (maks. 100)
+  tv: { favorit: [] }, // saluran TV favorit (maks. 100)
 };
 
 const getRow = db.prepare('SELECT data FROM user_prefs WHERE user_id = ?');
@@ -72,6 +73,10 @@ function update(userId, patch) {
   if (isObj(p.quran)) {
     if (/^\d{2}$/.test(String(p.quran.qari || ''))) next.quran.qari = String(p.quran.qari);
     if (typeof p.quran.semua === 'boolean') next.quran.semua = p.quran.semua;
+  }
+  if (isObj(p.tv) && Array.isArray(p.tv.favorit)) {
+    const { sanitizeFav } = require('./tv');
+    next.tv.favorit = p.tv.favorit.map(sanitizeFav).filter(Boolean).slice(0, 100);
   }
   if (isObj(p.radio) && Array.isArray(p.radio.favorit)) {
     // eslint-disable-next-line global-require

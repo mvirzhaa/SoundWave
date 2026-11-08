@@ -156,3 +156,15 @@ src/
 - **Ganti nama & urutan (v10)**: menu ⋮ lagu Drive → **Ganti nama…** (tulis `Artis - Judul`); daftar Lagu di
   Pustaka bisa diurutkan lewat tombol di atas daftar (Terbaru, Terlama, Judul A–Z / Z–A, Artis A–Z) dan
   pilihan diingat di HP. Hanya perubahan JS — cukup build ulang APK.
+- **v11**: tekan lama lagu di Pustaka → pilih beberapa lagu → **Playlist** / **Antrean**; tombol & ketuk-dua-kali
+  sisi sampul untuk mundur/maju 10 detik; saran pencarian tertutup otomatis setelah mencari; di halaman playlist,
+  tahan lalu geser lagu untuk mengubah urutan (tanpa modul native tambahan); tab Playlist bisa tampil sebagai
+  **Kartu** atau **Daftar** (diingat di HP).
+- **v12 — TV**: tab **TV** setelah Radio (Pilihan YouTube Live resmi & saluran admin, Indonesia, Dunia, Favorit,
+  Link saya), pemutar layar penuh dengan daftar pindah saluran, sumber cadangan otomatis, PiP, dan lanskap.
+  **Jadwal Sholat** dipindah ke menu Akun; **Link TV (M3U)** diatur di Akun. Menambah modul native
+  **expo-video** → **APK wajib di-build ulang** (`npx expo prebuild --clean` lalu build seperti biasa / EAS).
+  Perbaikan: "Simpan ke Drive" untuk file besar tidak lagi gagal karena batas waktu 30 detik.
+- **v13**: penanda playlist di Pustaka — lingkaran kecil berisi inisial playlist yang sudah memuat lagu itu
+  (maks. 3, sisanya "+N"), diperbarui otomatis saat lagu ditambah/dihapus dari playlist. Hanya perubahan JS
+  (bila APK v12 dengan expo-video sudah dipasang, cukup build ulang seperti biasa).

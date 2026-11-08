@@ -9,6 +9,7 @@ import { renderLibrary, renderPlaylist, renderGroup, trackMenu } from './views/l
 import { renderAccount } from './views/account.js';
 import { renderSholat } from './views/sholat.js';
 import { renderRadio } from './views/radio.js';
+import { renderTv } from './views/tv.js';
 import { loadRadioFav } from './radio.js';
 import { startAnnouncements, stopAnnouncements } from './announce.js';
 import { loadSholat, nextChipText } from './sholat.js';
@@ -120,7 +121,8 @@ function route() {
   closeFull();
   view.textContent = '';
   document.querySelectorAll('[data-nav]').forEach((a) => {
-    const active = a.dataset.nav === section || (a.dataset.nav === 'pustaka' && ['playlist', 'artis', 'genre'].includes(section));
+    const active = a.dataset.nav === section || (a.dataset.nav === 'pustaka' && ['playlist', 'artis', 'genre'].includes(section))
+      || (a.dataset.nav === 'akun' && section === 'sholat'); // Sholat kini bagian dari menu Akun
     a.classList.toggle('active', active);
     if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
@@ -133,6 +135,7 @@ function route() {
     case 'akun': renderAccount(view, params, { logout }); break;
     case 'sholat': r = renderSholat(view); break;
     case 'radio': r = renderRadio(view); break;
+    case 'tv': r = renderTv(view); break;
     default: renderSearch(view, params);
   }
   Promise.resolve(r).then((fn) => { if (typeof fn === 'function') cleanup = fn; });

@@ -1,16 +1,16 @@
 /** Tab Sholat: wilayah (GPS real time / manual), hitung mundur, jadwal hari ini, pengaturan adzan. */
 import React, { useEffect, useRef, useState } from 'react';
-import { T, currentLang } from '../../lib/i18n';
+import { T, currentLang } from '../lib/i18n';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { get } from '../../lib/api';
-import { Kota, useSholat } from '../../lib/sholat';
-import { useUi } from '../../lib/ui';
-import { Button, Chip } from '../../components/Common';
-import { C, themed } from '../../lib/theme';
-import { fmtJam, formatTanggal, hariIni, namaWaktu, titleCase, todayIn, WAJIB, WAKTU, Wajib } from '../../lib/prayer';
+import { get } from '../lib/api';
+import { Kota, useSholat } from '../lib/sholat';
+import { useUi } from '../lib/ui';
+import { Button, Chip } from '../components/Common';
+import { C, themed } from '../lib/theme';
+import { fmtJam, formatTanggal, hariIni, namaWaktu, titleCase, todayIn, WAJIB, WAKTU, Wajib } from '../lib/prayer';
 
 export default function SholatScreen() {
   const S = useSholat();

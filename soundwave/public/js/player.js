@@ -293,9 +293,16 @@ export function closeFull() {
 /* ---------- Event ---------- */
 export function initPlayer({ trackMenu }) {
   initLyrics({ media, current });
+  /** Maju/mundur N detik (tidak berlaku untuk radio siaran langsung). */
+  function skipBy(d) {
+    const t = current();
+    if (!t || t.radio || !Number.isFinite(media.duration)) return;
+    media.currentTime = Math.max(0, Math.min(media.duration - 0.5, media.currentTime + d));
+  }
+
   document.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', (e) => {
     e.stopPropagation();
-    ({ toggle, next: () => next(false), prev })[b.dataset.act]?.();
+    ({ toggle, next: () => next(false), prev, back10: () => skipBy(-10), fwd10: () => skipBy(10) })[b.dataset.act]?.();
   }));
   $('miniOpen').addEventListener('click', openFull);
   $('fullClose').addEventListener('click', closeFull);
@@ -360,6 +367,8 @@ export function initPlayer({ trackMenu }) {
     else if (e.key === 'Escape' && !full.hidden) closeFull();
     else if (e.key === 'ArrowRight' && e.shiftKey) next(false);
     else if (e.key === 'ArrowLeft' && e.shiftKey) prev();
+    else if (e.key === 'ArrowRight' && current()) skipBy(10);
+    else if (e.key === 'ArrowLeft' && current()) skipBy(-10);
   });
 
   on('favorites', updateFav);

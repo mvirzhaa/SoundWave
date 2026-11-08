@@ -53,7 +53,7 @@ function login(email, password) {
 
 const tokenFor = (a) => jwt.sign({ sub: a.id, v: a.token_version, typ: 'admin' }, cfg.JWT_KEY, { algorithm: 'HS256', expiresIn: TTL });
 
-const COOKIE_PATH = cfg.BASE_PATH ? `${cfg.BASE_PATH}/` : '/';
+const COOKIE_PATH = cfg.BASE_PATH ? `${cfg.BASE_PATH}/api/admin` : '/api/admin';
 
 function setCookie(res, a) {
   const token = tokenFor(a);

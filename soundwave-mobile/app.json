@@ -3,7 +3,7 @@
     "name": "SoundWave",
     "slug": "soundwave",
     "scheme": "soundwave",
-    "version": "1.0.10",
+    "version": "1.1.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -71,8 +71,7 @@
         "expo-build-properties",
         {
           "android": {
-            "usesCleartextTraffic": true,
-            "minSdkVersion": 24
+            "usesCleartextTraffic": true
           }
         }
       ],
@@ -101,6 +100,13 @@
           "color": "#8b6dff",
           "defaultChannel": "adzan",
           "sounds": []
+        }
+      ],
+      [
+        "expo-video",
+        {
+          "supportsPictureInPicture": true,
+          "supportsBackgroundPlayback": false
         }
       ]
     ],

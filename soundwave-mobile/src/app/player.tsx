@@ -1,9 +1,9 @@
 /** Pemutar penuh: sampul, posisi, kontrol, favorit, acak, ulangi, antrean. */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { T } from '../lib/i18n';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { usePlayer, usePlayerProgress } from '../lib/player';
 import { useLibrary } from '../lib/library';
@@ -29,6 +29,9 @@ export default function PlayerScreen() {
   const toggleView = (v: 'queue' | 'lyrics') => setView((cur) => (cur === v ? 'art' : v));
   const t = p.current;
   useRadioFav(); // render ulang saat favorit radio berubah
+  const [flash, setFlash] = useState('');
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTap = useRef<{ side: string; at: number }>({ side: '', at: 0 });
 
   if (!t) {
     return (
@@ -40,6 +43,20 @@ export default function PlayerScreen() {
   }
   const fav = t.radio ? isFavRadio(t.radio.uuid) : lib.favorites.has(t.id);
   const art = Math.min(width - 56, 380);
+  const skip = (d: number) => {
+    const max = prog.duration || t?.duration || 0;
+    let to = Math.max(0, prog.position + d);
+    if (max) to = Math.min(Math.max(0, max - 1), to);
+    p.seek(to);
+    setFlash(d > 0 ? T('+{n} detik', { n: d }) : T('−{n} detik', { n: -d }));
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(''), 700);
+  };
+  const dbl = (side: string, fn: () => void) => {
+    const now = Date.now();
+    if (lastTap.current.side === side && now - lastTap.current.at < 350) { fn(); lastTap.current = { side: '', at: 0 }; }
+    else lastTap.current = { side, at: now };
+  };
 
   return (
     <SafeAreaView style={s.wrap}>
@@ -77,7 +94,23 @@ export default function PlayerScreen() {
         />
       ) : (
         <View style={s.artWrap}>
-          <Cover ytId={t.ytId} uri={t.coverUri} quran={t.quran?.surat} radio={t.radio ? t.radio.freq || '' : undefined} seed={t.artist + t.title} size={art} radius={22} hq />
+          <View>
+            <Cover ytId={t.ytId} uri={t.coverUri} quran={t.quran?.surat} radio={t.radio ? t.radio.freq || '' : undefined} seed={t.artist + t.title} size={art} radius={22} hq />
+            {t.radio ? null : (
+              <>
+                {/* Ketuk dua kali sisi kiri/kanan sampul = mundur/maju 10 detik (seperti pemutar video) */}
+                <Pressable style={[s.tapZone, { left: 0 }]} onPress={() => dbl('l', () => skip(-10))} />
+                <Pressable style={[s.tapZone, { right: 0 }]} onPress={() => dbl('r', () => skip(10))} />
+                <Pressable style={[s.skipBtn, { left: 12 }]} hitSlop={6} onPress={() => skip(-10)} accessibilityLabel={T('Mundur 10 detik')}>
+                  <MaterialIcons name="replay-10" size={30} color="#fff" />
+                </Pressable>
+                <Pressable style={[s.skipBtn, { right: 12 }]} hitSlop={6} onPress={() => skip(10)} accessibilityLabel={T('Maju 10 detik')}>
+                  <MaterialIcons name="forward-10" size={30} color="#fff" />
+                </Pressable>
+                {flash ? <View style={s.flash} pointerEvents="none"><Text style={s.flashText}>{flash}</Text></View> : null}
+              </>
+            )}
+          </View>
         </View>
       )}
 
@@ -148,6 +181,10 @@ const s = themed(() => StyleSheet.create({
   eyebrow: { color: C.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
   source: { color: C.text, fontWeight: '700' },
   artWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  tapZone: { position: 'absolute', top: 0, bottom: 0, width: '38%' },
+  skipBtn: { position: 'absolute', bottom: 12, width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(0,0,0,0.38)', alignItems: 'center', justifyContent: 'center' },
+  flash: { position: 'absolute', alignSelf: 'center', top: '42%', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.55)' },
+  flashText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   meta: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, marginTop: 12, gap: 12 },
   title: { color: C.text, fontSize: 24, fontWeight: '800' },
   artist: { color: C.muted, fontSize: 16, marginTop: 2 },

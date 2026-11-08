@@ -73,7 +73,7 @@ export async function api<T = any>(path: string, opts: Opts = {}): Promise<T> {
 }
 
 export const get = <T = any>(p: string, o?: Opts) => api<T>(p, o);
-export const post = <T = any>(p: string, body: unknown = {}) => api<T>(p, { method: 'POST', body });
+export const post = <T = any>(p: string, body: unknown = {}, o: Omit<Opts, 'method' | 'body'> = {}) => api<T>(p, { method: 'POST', body, ...o });
 export const put = <T = any>(p: string, body: unknown = {}) => api<T>(p, { method: 'PUT', body });
 export const patch = <T = any>(p: string, body: unknown = {}) => api<T>(p, { method: 'PATCH', body });
 export const del = <T = any>(p: string, body?: unknown) => api<T>(p, { method: 'DELETE', body });

@@ -43,7 +43,7 @@ export default function GroupScreen() {
           </View>
         }
         renderItem={({ item, index }) => (
-          <TrackRow track={item} active={player.current?.id === item.id} favorite={lib.favorites.has(item.id)} showSource
+          <TrackRow showPlaylists track={item} active={player.current?.id === item.id} favorite={lib.favorites.has(item.id)} showSource
             onPress={() => player.playList(list, index, { source: String(name) })}
             onMore={() => menu.open(item, { list, index })} />
         )}

@@ -153,6 +153,26 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_lyrics_db_title ON lyrics_db (title_norm);
   CREATE INDEX IF NOT EXISTS idx_lyrics_db_yt ON lyrics_db (yt_id);
+  CREATE TABLE IF NOT EXISTS tv_channels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,            -- 'youtube' | 'hls'
+    src TEXT NOT NULL,             -- youtube: @handle / UC… / URL; hls: URL .m3u8
+    logo TEXT,
+    country TEXT NOT NULL DEFAULT 'ID',
+    category TEXT,
+    sort INTEGER NOT NULL DEFAULT 100,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS tv_m3u (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_tv_m3u_user ON tv_m3u (user_id);
   CREATE TABLE IF NOT EXISTS push_tokens (
     token TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

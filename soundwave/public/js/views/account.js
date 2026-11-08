@@ -1,6 +1,7 @@
 /** Halaman Akun: profil, koneksi Google Drive & folder penyimpanan, kata sandi, keluar. */
 import { h, icon, I, toast, confirmDialog } from '../ui.js';
-import { post, put, patch, del } from '../api.js';
+import { get, post, put, patch, del } from '../api.js';
+import { nextChipText } from '../sholat.js';
 import { ann, markRead } from '../announce.js';
 import { store, setUser, invalidateTracks } from '../store.js';
 
@@ -31,8 +32,19 @@ export function renderAccount(view, params, { logout }) {
         try { const r = await patch('/api/auth/me', { name: nameIn.value }); setUser(r.user); toast('Nama disimpan'); draw(); } catch (er) { toast(er.message, { type: 'error' }); }
       } }, h('label.field.grow', {}, h('span', { text: 'Nama tampilan' }), nameIn), h('button.btn', { type: 'submit', text: 'Simpan' })))));
 
+    /* Jadwal sholat & adzan (dipindah dari menu utama ke Akun) */
+    page.append(h('a.panel-card.acc-link', { href: '#/sholat' },
+      h('span.acc-ico', {}, icon('M12 3c3 2 5 4.5 5 8H7c0-3.5 2-6 5-8zM5 11h14v10H5zM10 21v-4a2 2 0 0 1 4 0v4')),
+      h('span.acc-title', {}, h('b', { text: 'Jadwal Sholat & Adzan' }), h('small', { text: nextChipText() || 'Wilayah, waktu sholat, suara & pengingat adzan' })),
+      icon('m9 6 6 6-6 6')));
+
     /* Google Drive — dua mode */
     page.append(section('drive', icon(I.cloud), 'Google Drive', driveSummary(d), driveCard(d)));
+
+    /* Link TV (M3U) — seperti "Buka stream jaringan" di VLC */
+    const m3uSec = section('m3u', icon('M3 6h18v12H3zM8 21h8M12 18v3'), 'Link TV (M3U)', 'Daftar saluran TV dari link Anda sendiri', m3uCard());
+    if (params.get('buka') === 'm3u') { m3uSec.open = true; setTimeout(() => m3uSec.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }
+    page.append(m3uSec);
 
     /* Kata sandi */
     const cur = h('input', { type: 'password', autocomplete: 'current-password', required: true });
@@ -80,6 +92,43 @@ export function renderAccount(view, params, { logout }) {
       try { const m = JSON.parse(localStorage.getItem('sw-acc') || '{}'); m[key] = el.open; localStorage.setItem('sw-acc', JSON.stringify(m)); } catch { /* abaikan */ }
     });
     return el;
+  }
+
+  function m3uCard() {
+    const box = h('div.m3u');
+    const list = h('div.m3u-list');
+    const nameIn = h('input', { placeholder: 'Nama (opsional), mis. TV Kampus', maxlength: 60, 'aria-label': 'Nama link' });
+    const urlIn = h('input', { type: 'url', placeholder: 'https://…/playlist.m3u', required: true, 'aria-label': 'Link M3U', inputmode: 'url' });
+    const err = h('p.err', { hidden: true });
+    const submit = h('button.btn-primary', { type: 'submit', text: 'Tambahkan' });
+    const drawList = (links) => {
+      list.textContent = '';
+      if (!links.length) { list.append(h('p.muted', { text: 'Belum ada link. Link yang ditambahkan muncul sebagai tab “Link saya” di menu TV.' })); return; }
+      links.forEach((l) => list.append(h('div.m3u-row', {},
+        h('span.acc-ico', {}, icon('M3 6h18v12H3z')),
+        h('span.m3u-text', {}, h('b', { text: l.name }), h('small', { text: l.url })),
+        h('a.btn.sm', { href: '#/tv', text: 'Buka', onclick: () => { try { const u = JSON.parse(localStorage.getItem('sw-tv-ui') || '{}'); localStorage.setItem('sw-tv-ui', JSON.stringify({ ...u, tab: 'm3u', m3u: l.id })); } catch { /* abaikan */ } } }),
+        h('button.icon-btn', { type: 'button', 'aria-label': `Hapus ${l.name}`, onclick: async () => {
+          if (!(await confirmDialog('Hapus link?', `“${l.name}” akan dihapus dari akun Anda.`, { ok: 'Hapus', danger: true }))) return;
+          try { drawList((await del(`/api/tv/m3u/${l.id}`)).links); toast('Link dihapus'); } catch (e) { toast(e.message, { type: 'error' }); }
+        } }, icon('M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3')))));
+    };
+    get('/api/tv/m3u').then((r) => drawList(r.links)).catch((e) => { list.textContent = e.message; });
+    box.append(
+      h('p.muted', { text: 'Tempel link daftar saluran (.m3u / .m3u8) yang Anda miliki — seperti “Buka stream jaringan” di VLC. Link disimpan di akun Anda saja; isi siaran menjadi tanggung jawab pemilik link.' }),
+      list,
+      h('form.grid-form.m3u-form', { onsubmit: async (e) => {
+        e.preventDefault(); err.hidden = true;
+        submit.disabled = true; submit.textContent = 'Memeriksa link…';
+        try {
+          const r = await post('/api/tv/m3u', { name: nameIn.value, url: urlIn.value });
+          toast(`${r.link.name}: ${r.link.count} saluran ditambahkan`);
+          nameIn.value = urlIn.value = '';
+          drawList((await get('/api/tv/m3u')).links);
+        } catch (er) { err.textContent = er.message; err.hidden = false; }
+        submit.disabled = false; submit.textContent = 'Tambahkan';
+      } }, h('label.field', {}, h('span', { text: 'Link M3U' }), urlIn), h('label.field', {}, h('span', { text: 'Nama' }), nameIn), err, submit));
+    return box;
   }
 
   function driveSummary(d) {

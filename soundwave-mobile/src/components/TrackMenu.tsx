@@ -30,14 +30,16 @@ export function useTrackMenu() {
   const sholat = useSholat();
   const { user } = useAuth();
 
-  const addToPlaylist = async (tracks: Track[]) => {
+  const addToPlaylist = async (tracks: Track[], onDone?: () => void) => {
     let data: { playlists: PlaylistSummary[] };
     try { data = await get('/api/library/playlists'); } catch (e: any) { ui.toast(e.message, true); return; }
     const add = async (p: { id: number | string; name: string }) => {
       try {
-        const r = await post<{ added: number }>(`/api/library/playlists/${p.id}/items`, { tracks });
+        const r = await post<{ added: number; skipped?: number }>(`/api/library/playlists/${p.id}/items`, { tracks });
         lib.bumpPlaylists();
-        ui.toast(r.added ? T('Ditambahkan ke “{p}”', { p: p.name }) : T('Sudah ada di “{p}”', { p: p.name }));
+        if (tracks.length > 1) ui.toast(r.added ? T('{n} lagu ditambahkan ke “{p}”', { n: r.added, p: p.name }) : T('Semua lagu sudah ada di “{p}”', { p: p.name }));
+        else ui.toast(r.added ? T('Ditambahkan ke “{p}”', { p: p.name }) : T('Sudah ada di “{p}”', { p: p.name }));
+        onDone?.();
       } catch (e: any) { ui.toast(e.message, true); }
     };
     ui.sheet({

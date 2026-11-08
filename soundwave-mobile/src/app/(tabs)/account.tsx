@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { del, getServer, post, put } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -12,6 +12,9 @@ import { useSettings, ThemeMode } from '../../lib/settings';
 import { offlineSizeBytes, offlineTracks, removeOffline } from '../../lib/offline';
 import { Button, Chip } from '../../components/Common';
 import { Accordion } from '../../components/Accordion';
+import { M3uLinks } from '../../components/M3uLinks';
+import { useSholat } from '../../lib/sholat';
+import { namaWaktu } from '../../lib/prayer';
 import { unregisterPush, useAnnouncements } from '../../components/Announcements';
 import { C, fmtSize, themed } from '../../lib/theme';
 import { T, Lang } from '../../lib/i18n';
@@ -23,6 +26,8 @@ export default function AccountScreen() {
   const ui = useUi();
   const settings = useSettings();
   const ann = useAnnouncements();
+  const sholat = useSholat();
+  const params = useLocalSearchParams<{ buka?: string }>();
   const [cur, setCur] = useState('');
   const [nxt, setNxt] = useState('');
   const [busy, setBusy] = useState('');
@@ -64,6 +69,15 @@ export default function AccountScreen() {
         <Ionicons name="chevron-forward" size={18} color={C.muted} />
       </Pressable>
 
+      <Pressable style={s.annRow} onPress={() => router.push('/sholat')}>
+        <View style={s.annIco}><Ionicons name="moon-outline" size={19} color={C.accent} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.annTitle}>{T('Jadwal Sholat & Adzan')}</Text>
+          <Text style={s.muted} numberOfLines={1}>{sholat.next ? T('{w} pukul {j}', { w: T(namaWaktu[sholat.next.key]), j: sholat.next.jam }) : T('Wilayah, waktu sholat, suara & pengingat adzan')}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={C.muted} />
+      </Pressable>
+
       <Accordion id="tampilan" icon="color-palette-outline" title={T('Tampilan & bahasa')}
         summary={`${themeLabel[settings.theme]} · ${settings.lang === 'en' ? 'English' : 'Bahasa Indonesia'}`}>
         <Text style={s.label}>{T('Tema')}</Text>
@@ -99,6 +113,10 @@ export default function AccountScreen() {
           'Masukkan lagu Dewa ke playlist kenangan', 'Masukkan lagu fly me to the moon ke playlist kenangan',
           'Putar surat Al-Mulk', 'Kapan maghrib', 'Lagu berikutnya / jeda / lanjutkan']
           .map((x) => <Text key={x} style={s.example}>“{x}”</Text>)}
+      </Accordion>
+
+      <Accordion id="m3u" icon="tv-outline" title={T('Link TV (M3U)')} summary={T('Daftar saluran TV dari link Anda sendiri')} force={params.buka === 'm3u'}>
+        <M3uLinks />
       </Accordion>
 
       <Accordion id="sandi" icon="lock-closed-outline" title={T('Ganti kata sandi')} summary={T('Perangkat lain otomatis keluar')}>

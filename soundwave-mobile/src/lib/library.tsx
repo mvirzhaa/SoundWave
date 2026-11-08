@@ -3,6 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { del, get, patch, post, put } from './api';
 import { useAuth } from './auth';
 import { loadOffline, offlineTracks, subscribeOffline, updateOfflineMeta } from './offline';
+import { clearMembership, refreshMembership } from './membership';
 import * as Local from './local';
 import type { Track } from './types';
 
@@ -109,6 +110,8 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, driveReady]);
 
+  // Penanda playlist: muat saat pengguna masuk, kosongkan saat keluar
+  useEffect(() => { if (user) refreshMembership(); else clearMembership(); }, [user?.id]);
   useEffect(() => { setTracks(null); if (user) load(); }, [user?.id, user?.drive.folderId, user?.drive.connected, user?.drive.mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Favorit lagu lokal (ID-nya disimpan server, file tetap di HP)
@@ -155,7 +158,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   return (
     <Ctx.Provider value={{
       tracks, loading, error, usingOffline, favorites, offlineVersion, playlistsVersion,
-      load, toggleFavorite, setGenre, trashTrack, renameTrack, bumpPlaylists: () => setPV((v) => v + 1), recordPlay,
+      load, toggleFavorite, setGenre, trashTrack, renameTrack, bumpPlaylists: () => { setPV((v) => v + 1); refreshMembership(); }, recordPlay,
       localTracks, localSettings, localScan, scanLocal, setDeviceScan, addFolder, removeFolder, importLocal, setLocalGenre, removeImported,
     }}>
       {children}

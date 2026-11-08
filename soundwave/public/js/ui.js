@@ -11,6 +11,13 @@ export function h(spec, props = {}, ...children) {
     if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), v);
     else if (k === 'text') el.textContent = v;
     else if (k === 'dataset') Object.assign(el.dataset, v);
+    // CSP memblokir atribut style="…"; pasang lewat CSSOM (diizinkan), termasuk variabel CSS seperti --h
+    else if (k === 'style' && typeof v === 'string') {
+      for (const decl of v.split(';')) {
+        const i = decl.indexOf(':');
+        if (i > 0) el.style.setProperty(decl.slice(0, i).trim(), decl.slice(i + 1).trim());
+      }
+    }
     else if (k in el && typeof v !== 'string') el[k] = v;
     else el.setAttribute(k, v === true ? '' : v);
   }

@@ -1,5 +1,5 @@
 /** Halaman Sholat: wilayah (pilih manual), jadwal hari ini, hitung mundur, pengaturan adzan. */
-import { h, icon, toast, openOverlay, debounce } from '../ui.js';
+import { h, icon, I, toast, openOverlay, debounce } from '../ui.js';
 import { get } from '../api.js';
 import { on } from '../store.js';
 import { sholat, WAKTU, WAJIB, namaWaktu, fmtJam, hariIni, savePrefs, playAdzan, stopAdzan, todayIn } from '../sholat.js';
@@ -12,7 +12,7 @@ export function renderSholat(view) {
     page.textContent = '';
     const p = sholat.prefs?.sholat;
     const j = sholat.jadwal;
-    page.append(h('h2', { text: 'Jadwal Sholat' }));
+    page.append(h('a.back', { href: '#/akun' }, icon(I.back), 'Akun'), h('h2', { text: 'Jadwal Sholat' }));
 
     /* Wilayah */
     const lokasi = j?.lokasi || p?.kota?.lokasi || '';

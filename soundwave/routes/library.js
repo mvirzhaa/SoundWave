@@ -128,6 +128,33 @@ function getOwned(req) {
 const touch = (id) => db.prepare('UPDATE playlists SET updated_at = ? WHERE id = ?').run(Date.now(), id);
 const coversOf = (rows) => rows.map((x) => JSON.parse(x.meta).ytId).filter(Boolean).slice(0, 4);
 
+/**
+ * Penanda di Pustaka: lagu mana sudah masuk playlist mana.
+ * → { playlists: [{ id, name, initials, hue }], map: { fileId: [playlistId, …] } }
+ */
+function initialsOf(name) {
+  const words = String(name).replace(/[^\p{L}\p{N} ]/gu, ' ').split(/\s+/).filter(Boolean);
+  if (!words.length) return '♪';
+  if (words.length === 1) return words[0].slice(0, 2).replace(/^(.)(.*)$/, (m, a, b) => a.toUpperCase() + b.toLowerCase());
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+r.get('/playlists/membership', auth, (req, res) => {
+  const uid = req.user.id;
+  const pls = db.prepare('SELECT id, name FROM playlists WHERE user_id = ? ORDER BY name COLLATE NOCASE').all(uid);
+  const rows = db.prepare(`SELECT i.file_id, i.playlist_id FROM playlist_items i JOIN playlists p ON p.id = i.playlist_id
+    WHERE p.user_id = ?`).all(uid);
+  const map = {};
+  for (const r0 of rows) (map[r0.file_id] ||= []).includes(r0.playlist_id) || map[r0.file_id].push(r0.playlist_id);
+  const order = new Map(pls.map((p, i) => [p.id, i])); // urutan lingkaran = urutan nama playlist
+  for (const k of Object.keys(map)) map[k].sort((a, b) => order.get(a) - order.get(b));
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    // Warna tetap per playlist; "sudut emas" membuat playlist yang berurutan dibuat tetap berbeda jelas warnanya
+    playlists: pls.map((p) => ({ id: p.id, name: p.name, initials: initialsOf(p.name), hue: Math.round((p.id * 137.508 + 20) % 360) })),
+    map,
+  });
+});
+
 r.get('/playlists', auth, (req, res) => {
   const uid = req.user.id;
   const favRows = db.prepare('SELECT meta FROM favorites WHERE user_id = ? ORDER BY added_at DESC').all(uid);

@@ -1,6 +1,6 @@
 {
   "name": "soundwave-mobile",
-  "version": "1.0.10",
+  "version": "1.1.1",
   "main": "expo-router/entry",
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
@@ -23,6 +23,7 @@
     "expo-speech-recognition": "^58.0.1",
     "expo-splash-screen": "~58.0.13",
     "expo-status-bar": "~58.0.4",
+    "expo-video": "~58.0.13",
     "expo-web-browser": "~58.0.7",
     "react": "19.3.0",
     "react-dom": "^19.3.0",

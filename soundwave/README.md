@@ -141,6 +141,47 @@ jaringan privat ditolak, dan jumlah stream serentak dibatasi `RADIO_MAX_STREAMS`
   memilih lagu/file adzan dari pustakanya sendiri.
 - Teks Al-Qur'an, terjemahan, dan audio murottal dari **equran.id** (API v2), di-cache di server.
 
+## TV (menu setelah Radio)
+
+Menu utama: **Pustaka → Radio → TV → Cari → Akun**. *Jadwal Sholat* kini dibuka dari menu **Akun**.
+
+- **Pilihan** — siaran langsung resmi di YouTube (Kompas TV, CNN Indonesia, tvOne, Metro TV, iNews, CNBC
+  Indonesia, Al Jazeera, DW, France 24, NHK, Sky News, CNA, TRT World, Euronews) + saluran yang ditambahkan admin
+  (mis. TV kampus). Diatur di **/admin → TV** (ubah, sembunyikan, urutan, tombol *Cek* siaran langsung).
+  Server mencari video siaran yang sedang berjalan dengan yt-dlp (maks. 2 proses sekaligus, cache 15 menit).
+  Bila penyiar melarang pemutaran di luar YouTube, muncul tombol **Buka di YouTube**.
+- **Indonesia / Dunia** — daftar publik [iptv-org](https://github.com/iptv-org/api) (±9.700 kanal dari ±180
+  negara), bisa dicari dan disaring per negara & kategori. Kanal dewasa, kanal tutup, dan stream yang butuh header
+  khusus dibuang. Daftar diunduh di latar belakang, diringkas ke `data/tv-cache.json`, diperbarui tiap 24 jam
+  (atau tombol *Perbarui* di panel admin); permintaan pengguna tidak pernah menunggu unduhan ini.
+- **Favorit** — tersimpan di akun (sama di web & HP).
+- **Link saya** — link M3U milik pengguna (seperti *Buka stream jaringan* di VLC), diatur di **Akun → Link TV
+  (M3U)**. Link diperiksa dulu (maks. 8 MB, 3.000 saluran, 20 detik; alamat jaringan privat ditolak), maks. 10 per
+  akun.
+
+Pemutaran: web memakai hls.js (disajikan dari `/vendor/hls.min.js`, Safari memakai HLS bawaan), HP memakai
+expo-video. Pengaman agar tidak hang: tiap saluran punya hingga 4 sumber cadangan yang dicoba otomatis bila
+15 detik tidak ada gambar; buffering > 20 detik saat menonton → sambung ulang; pindah saluran membatalkan
+pemuatan sebelumnya; musik SoundWave dijeda saat TV mulai (dan sebaliknya). Di halaman **https**, browser
+memblokir siaran **http** — kanal seperti itu ditandai "http" dan tetap bisa diputar di aplikasi HP.
+
+Ketersediaan siaran bergantung pada penyiar: sebagian dibatasi wilayah (label *Geo*) atau tidak 24 jam. Hak
+siar tetap milik penyiar; SoundWave hanya memutar siaran yang disediakan gratis untuk publik, siaran resmi di
+YouTube, link dari admin, dan link M3U yang ditambahkan pengguna sendiri (tanggung jawab pemilik link).
+
+## Pilih banyak, urutkan playlist, maju/mundur 10 detik
+
+- **Pilih banyak lagu**: tekan lama sebuah lagu (atau Ctrl/⌘-klik) di Pustaka → ketuk lagu lain → bar bawah:
+  **Playlist** (tambahkan semua ke playlist yang dipilih / playlist baru), **Antrean**, pilih semua, batal (Esc).
+- **Urutkan playlist**: tahan lagu ±0,4 detik (sentuh atau mouse) atau tarik pegangan ⠿, geser, lalu lepas.
+  Cadangan tanpa seret: menu ⋮ → Naikkan / Turunkan.
+- **Penanda playlist di Pustaka**: lagu yang sudah masuk playlist diberi lingkaran kecil berisi inisial playlist
+  (mis. "LS" = Lagu Santai), warna tetap per playlist; maks. 3 lingkaran, sisanya "+N". Arahkan kursor (web) /
+  pembaca layar untuk nama lengkap. API: `GET /api/library/playlists/membership`.
+- **Tampilan playlist**: Kartu atau Daftar (tombol di kanan atas tab Playlist; diingat di perangkat).
+- **Maju/mundur 10 detik**: tombol di pojok sampul pemutar layar penuh; di desktop juga tombol ← / →.
+- Saran pencarian tertutup otomatis setelah pencarian dijalankan.
+
 ## Ganti nama & urutan Pustaka
 
 - Menu ⋮ lagu → **Ganti nama…** mengganti nama file di Google Drive (ekstensi tetap). Tulis `Artis - Judul`
@@ -312,6 +353,8 @@ dengan ID tervalidasi; isolasi data antar pengguna diuji (playlist & job Drive p
 | Masalah | Solusi |
 |---|---|
 | `Sign in to confirm you're not a bot` | IP server ditandai YouTube; isi `YTDLP_COOKIES` dengan cookies.txt |
+| Menu TV: "Daftar TV sedang disiapkan" | Unduhan pertama daftar iptv-org (±18 MB) belum selesai; tunggu ±1 menit. Server perlu akses ke iptv-org.github.io atau raw.githubusercontent.com |
+| Saluran YouTube di tab Pilihan "tidak siaran" | Kanal sedang tidak live, atau handle berubah — perbaiki di /admin → TV lalu tekan *Cek* |
 | Unduhan gagal: `… is not defined`, `Requested format is not available`, error JS runtime | YouTube mengubah sistemnya → perbarui yt-dlp: panel admin → Ringkasan → **Perbarui yt-dlp** (versi .exe/binary), atau `pip install -U "yt-dlp[default]"`. Server otomatis mencoba sekali lagi dengan `YTDLP_FALLBACK_EXTRACTOR_ARGS`. Bila tetap gagal dengan Node, pasang Deno lalu `YTDLP_JS_RUNTIME=deno` |
 | Hubungkan Drive gagal `redirect_uri_mismatch` | Redirect URI di Google Cloud harus persis `<PUBLIC_URL>/api/drive/callback` |
 | "Akses Google Drive kedaluwarsa" | App OAuth masih *Testing* (token 7 hari) → Hubungkan ulang, atau publish/Internal |

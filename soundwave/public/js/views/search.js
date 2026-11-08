@@ -39,7 +39,7 @@ export function renderSearch(view, params) {
   );
 
   /* ---------- Autocomplete ---------- */
-  let items = []; let active = -1; let abort = null;
+  let items = []; let active = -1; let abort = null; let submitted = '';
   const closeSugg = () => { list.hidden = true; list.textContent = ''; items = []; active = -1; input.setAttribute('aria-expanded', 'false'); };
   const renderSugg = (arr, q) => {
     list.textContent = ''; items = arr; active = -1;
@@ -55,11 +55,11 @@ export function renderSearch(view, params) {
   };
   const fetchSugg = debounce(async () => {
     const q = input.value.trim();
-    if (q.length < 2 || /^https?:\/\//i.test(q)) return closeSugg();
+    if (q.length < 2 || /^https?:\/\//i.test(q) || q === submitted) return closeSugg();
     abort?.abort(); abort = new AbortController();
     try {
       const arr = await api('/api/suggest?q=' + encodeURIComponent(q), { signal: abort.signal });
-      if (input.value.trim() === q && document.activeElement === input) renderSugg(arr, q);
+      if (input.value.trim() === q && q !== submitted && document.activeElement === input) renderSugg(arr, q);
     } catch { /* abaikan */ }
   }, 180);
   input.addEventListener('input', fetchSugg);
@@ -75,12 +75,13 @@ export function renderSearch(view, params) {
   });
   form.addEventListener('submit', (e) => { e.preventDefault(); closeSugg(); const q = input.value.trim(); if (q) go(q); });
 
-  const go = (q) => { location.hash = '#/cari?q=' + encodeURIComponent(q); };
+  // Setelah mencari: saran ditutup dan tidak muncul lagi untuk kata yang sama (agar tidak menutupi hasil)
+  const go = (q) => { submitted = q.trim(); abort?.abort(); closeSugg(); input.blur(); location.hash = '#/cari?q=' + encodeURIComponent(q); };
 
   /* ---------- Pencarian ---------- */
   const q = params.get('q');
   if (q) {
-    input.value = q;
+    input.value = q; submitted = q.trim();
     if (last.q === q && last.results) renderResults(results, q, last.results);
     else doSearch(results, q, submit);
   } else if (last.results) {
@@ -262,7 +263,7 @@ function buildCard(it) {
     driveBtn.disabled = true;
     driveMsg.className = 'drive-msg'; driveMsg.textContent = 'Mengunggah ke Google Drive…';
     try {
-      const { link } = await post(`/api/jobs/${st.job.id}/drive`);
+      const { link } = await post(`/api/jobs/${st.job.id}/drive`, {}, { timeout: 15 * 60000 }); // unggah file besar bisa lama
       invalidateTracks();
       showDriveLink(link);
       toast('Tersimpan ke Google Drive', { action: { label: 'Buka Pustaka', run: () => { location.hash = '#/pustaka'; } } });

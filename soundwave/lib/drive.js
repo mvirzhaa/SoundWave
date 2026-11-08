@@ -360,6 +360,8 @@ async function uploadJob(user, job) {
     headers: { 'Content-Type': mime, 'Content-Length': String(size) },
     body: Readable.toWeb(fs.createReadStream(job.file)),
     duplex: 'half',
+    // Batas atas agar unggahan yang macet (jaringan putus di tengah) tidak menggantung selamanya
+    signal: AbortSignal.timeout(Math.max(5 * 60000, Math.ceil(size / (64 * 1024)) * 1000)),
   });
   const data = await put.json().catch(() => ({}));
   if (!put.ok) throw new DriveError(data.error?.message || `Upload gagal (${put.status}).`, 502);

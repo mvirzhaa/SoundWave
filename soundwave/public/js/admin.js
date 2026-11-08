@@ -85,7 +85,7 @@ function route() {
   view.textContent = '';
   const page = h('section.page.admin');
   view.append(page);
-  ({ ringkasan, pengguna, adzan, lirik, pengumuman, akun }[sec] || ringkasan)(page);
+  ({ ringkasan, pengguna, adzan, lirik, tv, pengumuman, akun }[sec] || ringkasan)(page);
 }
 window.addEventListener('hashchange', () => { if (me) route(); });
 
@@ -211,7 +211,7 @@ async function adzan(page) {
         h('h3', { text: label }),
         h('p.muted', { text: desc }),
         has ? h('div.status-line', {}, h('span.dot.ok'), h('span', { text: st.nama[jenis] })) : h('div.status-line', {}, h('span.dot.warn'), h('span', { text: jenis === 'umum' ? 'Belum ada file' : 'Belum ada — memakai suara umum' })),
-        has ? h('audio', { controls: true, preload: 'none', src: apiUrl(`/api/admin/adzan/${jenis}/file?v=${encodeURIComponent(st.versi || '')}`) }) : null,
+        has ? h('audio', { controls: true, preload: 'none', src: `/api/admin/adzan/${jenis}/file?v=${encodeURIComponent(st.versi || '')}` }) : null,
         h('div.btn-row', {}, btn, file,
           has ? h('button.link.danger', { type: 'button', text: 'Hapus', onclick: async () => {
             if (!(await confirmDialog(`Hapus suara adzan ${label.toLowerCase()}?`, jenis === 'umum' ? 'Pengguna tidak akan punya suara adzan bawaan sampai Anda mengunggah lagi.' : 'Subuh akan memakai suara adzan umum.', { ok: 'Hapus', danger: true }))) return;
@@ -234,6 +234,72 @@ async function adzan(page) {
         h('p.hint', { text: 'Format: MP3 / M4A / OGG / WAV, maks. 20 MB. Gunakan rekaman yang Anda miliki atau berlisensi bebas.' })));
   };
   try { st = await api('/adzan'); draw(); } catch (e) { body.append(h('p.state.err', { text: e.message })); }
+}
+
+/* ---------- TV: saluran pilihan ---------- */
+function tv(page) {
+  const box = h('div', {}, h('p.muted', { text: 'Memuat…' }));
+  const status = h('p.muted.src-line');
+  page.append(h('h2', { text: 'Saluran TV pilihan' }),
+    h('p.muted', { text: 'Tampil paling atas di tab “Pilihan” menu TV (web & HP). YouTube: isi @handle, ID kanal (UC…), atau link kanal — server mencari siaran langsung yang sedang berjalan. HLS: link .m3u8 yang Anda punya izinnya (mis. TV kampus).' }),
+    status, box);
+  const field = (label, el) => h('label.field', {}, h('span', { text: label }), el);
+
+  function form(cur, done) {
+    const name = h('input', { value: cur?.name || '', required: true, maxlength: 80 });
+    const kind = h('select', {}, h('option', { value: 'youtube', text: 'YouTube Live', selected: cur?.kind !== 'hls' }), h('option', { value: 'hls', text: 'Link HLS (.m3u8)', selected: cur?.kind === 'hls' }));
+    const src = h('input', { value: cur?.src || '', required: true, maxlength: 500, placeholder: '@kanal, UC…, atau https://…/index.m3u8' });
+    const logo = h('input', { value: cur?.logo || '', maxlength: 500, placeholder: 'https://…/logo.png (opsional)' });
+    const country = h('input', { value: cur?.country || 'ID', maxlength: 2, style: 'text-transform:uppercase' });
+    const category = h('input', { value: cur?.category || '', maxlength: 30, placeholder: 'news, general, religious…' });
+    const sort = h('input', { type: 'number', value: cur?.sort ?? 100 });
+    const err = h('p.err', { hidden: true });
+    return h('form.grid-form.tv-form', { onsubmit: async (e) => {
+      e.preventDefault(); err.hidden = true;
+      const body = { name: name.value, kind: kind.value, src: src.value, logo: logo.value, country: country.value, category: category.value, sort: Number(sort.value) };
+      try { await api(cur ? `/tv/${cur.id}` : '/tv', { method: cur ? 'PATCH' : 'POST', body }); toast(cur ? 'Saluran disimpan' : 'Saluran ditambahkan'); done(); }
+      catch (er) { err.textContent = er.message; err.hidden = false; }
+    } }, field('Nama', name), field('Jenis', kind), field('Sumber', src), field('Logo', logo), field('Negara (kode 2 huruf)', country), field('Kategori', category), field('Urutan', sort), err,
+    h('div.btn-row', {}, h('button.btn-primary', { type: 'submit', text: cur ? 'Simpan' : 'Tambah saluran' }), cur ? h('button.btn', { type: 'button', text: 'Batal', onclick: done }) : null));
+  }
+
+  async function load() {
+    let r;
+    try { r = await api('/tv'); } catch (e) { box.textContent = e.message; return; }
+    const i = r.iptv;
+    status.textContent = `Daftar publik iptv-org: ${i.siap ? `${i.kanal} kanal, diperbarui ${fmtTime(i.diperbarui)}` : 'belum tersedia'}${i.memuat ? ' · sedang memperbarui…' : ''}${i.galat ? ` · galat terakhir: ${i.galat}` : ''}`;
+    box.textContent = '';
+    const table = h('div.utable.tvtable', { role: 'table' },
+      h('div.urow.uhead', { role: 'row' }, ['Saluran', 'Sumber', 'Status', ''].map((t) => h('span', { role: 'columnheader', text: t }))));
+    r.saluran.forEach((x) => {
+      const st = h('span', { role: 'cell', text: x.kind === 'youtube' ? (x.live ? (x.live.videoId ? 'Siaran langsung ✓' : x.live.error || 'Tidak siaran') : 'Belum dicek') : 'HLS' });
+      const edit = h('div.tv-edit', { hidden: true });
+      table.append(h(`div.urow${x.active ? '' : '.off'}`, { role: 'row' },
+        h('span.ucell', { role: 'cell' }, h('b', { text: x.name }), h('small', { text: `${x.country}${x.category ? ` · ${x.category}` : ''} · urutan ${x.sort}${x.active ? '' : ' · disembunyikan'}` }), edit),
+        h('span.ucell', { role: 'cell' }, h('small', { text: `${x.kind === 'youtube' ? 'YouTube' : 'HLS'}: ${x.src}` })),
+        st,
+        h('span.btn-row', { role: 'cell' },
+          x.kind === 'youtube' ? h('button.link', { type: 'button', text: 'Cek', onclick: async (e) => {
+            e.target.textContent = 'Mengecek…';
+            try { const c = await api(`/tv/${x.id}/cek`, { method: 'POST' }); st.textContent = c.ok ? 'Siaran langsung ✓' : c.error; } catch (er) { st.textContent = er.message; }
+            e.target.textContent = 'Cek';
+          } }) : null,
+          h('button.link', { type: 'button', text: 'Ubah', onclick: () => { edit.hidden = !edit.hidden; if (!edit.hidden) { edit.textContent = ''; edit.append(form(x, load)); } } }),
+          h('button.link', { type: 'button', text: x.active ? 'Sembunyikan' : 'Tampilkan', onclick: async () => {
+            try { await api(`/tv/${x.id}`, { method: 'PATCH', body: { active: !x.active } }); load(); } catch (er) { toast(er.message, { type: 'error' }); }
+          } }),
+          h('button.link.danger', { type: 'button', text: 'Hapus', onclick: async () => {
+            if (!(await confirmDialog('Hapus saluran?', `“${x.name}” dihapus dari tab Pilihan dan dari favorit pengguna.`, { ok: 'Hapus', danger: true }))) return;
+            try { await api(`/tv/${x.id}`, { method: 'DELETE' }); toast('Saluran dihapus'); load(); } catch (er) { toast(er.message, { type: 'error' }); }
+          } }))));
+    });
+    box.append(table,
+      h('div.panel-card', {}, h('h3', { text: 'Tambah saluran' }), form(null, load)),
+      h('div.btn-row', {}, h('button.btn', { type: 'button', text: 'Perbarui daftar iptv-org sekarang', onclick: async () => {
+        try { await api('/tv-refresh', { method: 'POST' }); toast('Pembaruan berjalan di latar belakang (±1 menit)'); setTimeout(load, 4000); } catch (er) { toast(er.message, { type: 'error' }); }
+      } })));
+  }
+  load();
 }
 
 /* ---------- Database lirik ---------- */
