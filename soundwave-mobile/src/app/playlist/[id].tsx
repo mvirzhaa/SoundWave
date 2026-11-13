@@ -4,11 +4,14 @@ import { T } from '../../lib/i18n';
 import { ActivityIndicator, Animated, FlatList, GestureResponderEvent, Pressable, StyleSheet, Text, Vibration, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { del, get, patch, put } from '../../lib/api';
+import { del, patch, put, errText } from '../../lib/api';
+import { getCached } from '../../lib/cache';
+import { useOnline } from '../../lib/net';
+import { DownloadAll } from '../../components/DownloadAll';
 import { useLibrary } from '../../lib/library';
 import { usePlayer } from '../../lib/player';
 import { useUi } from '../../lib/ui';
-import { downloadOffline, isOffline } from '../../lib/offline';
+import { isOffline } from '../../lib/offline';
 import { TrackRow } from '../../components/TrackRow';
 import { useTrackMenu } from '../../components/TrackMenu';
 import { Collage } from '../../components/Cover';
@@ -85,7 +88,7 @@ export default function PlaylistScreen() {
     try {
       await put(`/api/library/playlists/${p.id}/order`, { itemIds: items.map((x) => x.itemId) });
       ui.toast(T('Urutan disimpan'));
-    } catch (e: any) { ui.toast(e.message, true); load(); }
+    } catch (e: any) { ui.toast(errText(e), true); load(); }
   };
   const startDrag = (index: number, e: GestureResponderEvent) => {
     const { pageY } = e.nativeEvent;
@@ -99,9 +102,16 @@ export default function PlaylistScreen() {
   };
   useEffect(() => () => { if (autoScroll.current) clearInterval(autoScroll.current); }, []);
 
+  const [stale, setStale] = useState(false);
+  const online = useOnline();
   const load = useCallback(() => {
-    get<PlaylistDetail>(`/api/library/playlists/${encodeURIComponent(String(id))}`).then((r) => { setP(r); setErr(''); }).catch((e) => setErr(e.message));
+    // Salinan terakhir disimpan di HP → playlist tetap bisa dibuka & diputar (lagu yang sudah diunduh) saat offline
+    getCached<PlaylistDetail>(`pl-${id}`, `/api/library/playlists/${encodeURIComponent(String(id))}`)
+      .then(({ data, stale: st }) => { setP(data); setStale(st); setErr(''); })
+      .catch((e) => setErr(errText(e)));
   }, [id]);
+  // Kembali online → muat ulang data terbaru
+  useEffect(() => { if (online && stale) load(); }, [online]); // eslint-disable-line react-hooks/exhaustive-deps
   useFocusEffect(useCallback(() => { load(); }, [load, lib.playlistsVersion]));
 
   if (err) return <Text style={{ color: C.danger, padding: 24 }}>{err}</Text>;
@@ -115,6 +125,11 @@ export default function PlaylistScreen() {
     return lt ? { ...lt, itemId: x.itemId, available: true } : { ...x, available: false };
   });
   const missingLocal = p.items.filter((x) => x.local && x.available === false).length;
+  // Offline: lagu yang belum diunduh tidak bisa diputar
+  if (!online) {
+    p.items = p.items.map((x) => (x.local || isOffline(x.id) || x.available === false ? x
+      : { ...x, available: false, unavailableReason: T('belum diunduh — butuh internet') }));
+  }
 
   const playable = p.items.filter((x) => x.available !== false);
   const total = p.items.reduce((sum, x) => sum + (x.duration || 0), 0);
@@ -122,20 +137,14 @@ export default function PlaylistScreen() {
   const plMenu = () => ui.sheet({
     title: p.name,
     items: [
-      { label: T('Simpan semua untuk offline'), icon: 'download-outline', onPress: async () => {
-        const todo = playable.filter((t) => !t.local && !isOffline(t.id));
-        ui.toast(`Mengunduh ${todo.length} lagu…`);
-        for (const t of todo) { try { await downloadOffline(t); } catch { /* lanjut */ } }
-        ui.toast(T('Selesai mengunduh untuk offline'));
-      } },
       !p.special && { label: T('Ubah nama'), icon: 'create-outline', onPress: async () => {
         const name = await ui.prompt({ title: T('Ubah nama playlist'), value: p.name });
         if (!name) return;
-        try { await patch(`/api/library/playlists/${p.id}`, { name }); lib.bumpPlaylists(); load(); } catch (e: any) { ui.toast(e.message, true); }
+        try { await patch(`/api/library/playlists/${p.id}`, { name }); lib.bumpPlaylists(); load(); } catch (e: any) { ui.toast(errText(e), true); }
       } },
       !p.special && { label: T('Hapus playlist'), icon: 'trash-outline', danger: true, onPress: async () => {
         if (!(await ui.confirm({ title: T('Hapus playlist?'), message: T('“{p}” akan dihapus. Lagu di Drive tidak ikut terhapus.', { p: p.name }), ok: T('Hapus'), danger: true }))) return;
-        try { await del(`/api/library/playlists/${p.id}`); lib.bumpPlaylists(); router.back(); } catch (e: any) { ui.toast(e.message, true); }
+        try { await del(`/api/library/playlists/${p.id}`); lib.bumpPlaylists(); router.back(); } catch (e: any) { ui.toast(errText(e), true); }
       } },
     ],
   });
@@ -170,10 +179,14 @@ export default function PlaylistScreen() {
             <Text style={s.title}>{p.name}</Text>
             <Text style={s.muted}>{p.items.length} {T('lagu')}{total ? ` · ${fmtDur(total)}` : ''}</Text>
             {missingLocal ? <Text style={[s.muted, { textAlign: 'center', fontSize: 13 }]}>{missingLocal} lagu lokal tidak ditemukan di HP ini (mungkin disimpan dari perangkat lain).</Text> : null}
+            {stale || !online ? (
+              <Text style={s.offNote}>{T('Sedang offline — hanya lagu yang sudah diunduh yang bisa diputar.')}</Text>
+            ) : null}
             <View style={s.actions}>
-              <Button label={T("Putar")} icon="play" disabled={!playable.length} onPress={() => player.playList(p.items, 0, { shuffle: false, source: p.name })} style={{ flex: 1 }} />
+              <Button label={T("Putar")} icon="play" disabled={!playable.length} onPress={() => player.playList(p.items, Math.max(0, p.items.findIndex((x) => x.available !== false)), { shuffle: false, source: p.name })} style={{ flex: 1 }} />
               <Button label={T("Acak")} icon="shuffle" kind="ghost" disabled={!playable.length} onPress={() => player.playList(p.items, null, { shuffle: true, source: p.name })} style={{ flex: 1 }} />
             </View>
+            <DownloadAll id={`pl-${p.id}`} label={p.name} tracks={p.items} />
           </View>
         }
         ListEmptyComponent={<Empty title={T("Playlist masih kosong")} text={p.special ? undefined : T('Tambahkan lagu lewat menu ⋮ di Pustaka, atau ucapkan “masukkan lagu … ke playlist …”.')} />}
@@ -189,7 +202,7 @@ export default function PlaylistScreen() {
               style={[shift ? { transform: [{ translateY: shift }] } : null, drag?.from === index && { opacity: 0 }]}>
               <TrackRow track={item} active={player.current?.id === item.id} favorite={lib.favorites.has(item.id)} showSource
                 lead={p.special ? undefined : <Ionicons name="reorder-three" size={20} color={C.muted} />}
-                onLongPress={p.special ? undefined : (e?: any) => e && startDrag(index, e)}
+                onLongPress={p.special || !online ? undefined : (e?: any) => e && startDrag(index, e)}
                 onPressOut={() => { setTimeout(() => { if (d.current && !d.current.owned) finish(); }, 60); }}
                 onPress={() => { if (!d.current) player.playList(p.items, index, { source: p.name }); }}
                 onMore={() => menu.open(item, { playlist: p, list: p.items, index, onChange: load })} />
@@ -212,6 +225,7 @@ export default function PlaylistScreen() {
 
 const s = themed(() => StyleSheet.create({
   head: { alignItems: 'center', padding: 16, gap: 6 },
+  offNote: { color: C.warn, fontSize: 13, textAlign: 'center', marginTop: 4 },
   eyebrow: { color: C.muted, fontSize: 11, fontWeight: '800', letterSpacing: 1.2, marginTop: 10 },
   title: { color: C.text, fontSize: 28, fontWeight: '800', textAlign: 'center' },
   muted: { color: C.muted },

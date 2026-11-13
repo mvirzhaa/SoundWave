@@ -1,6 +1,6 @@
 /** Cache pustaka Google Drive + favorit + penanda perubahan playlist. */
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { del, get, patch, post, put } from './api';
+import { del, get, patch, post, put, errText } from './api';
 import { useAuth } from './auth';
 import { loadOffline, offlineTracks, subscribeOffline, updateOfflineMeta } from './offline';
 import { clearMembership, refreshMembership } from './membership';
@@ -62,7 +62,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       setLocalTracks(r.tracks);
       setLocalScan({ busy: false, done: r.tracks.length, errors: r.errors });
     } catch (e: any) {
-      setLocalScan({ busy: false, done: 0, errors: [e.message] });
+      setLocalScan({ busy: false, done: 0, errors: [errText(e)] });
     }
   }, []);
 
@@ -104,7 +104,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     } catch (e: any) {
       const off = offlineTracks();
       if (off.length && e.status === 0) { setTracks(off); setUsingOffline(true); setError(null); }
-      else setError(e.message);
+      else setError(errText(e));
     } finally {
       setLoading(false);
     }

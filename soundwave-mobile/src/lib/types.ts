@@ -21,6 +21,8 @@ export type Track = {
   mime: string;
   isVideo: boolean;
   size?: number | null;
+  /** Alasan lagu tidak bisa diputar saat ini (mis. offline & belum diunduh) */
+  unavailableReason?: string;
   duration?: number | null;
   ytId?: string | null;
   cover?: string | null;

@@ -71,6 +71,8 @@ apiRouter.use('/sholat', require('./routes/sholat'));
 apiRouter.use('/quran', require('./routes/quran'));
 apiRouter.use('/radio', require('./routes/radio'));
 apiRouter.use('/pengumuman', require('./routes/pengumuman'));
+// Cek koneksi ringan untuk aplikasi HP (mendeteksi kembali online); tanpa data apa pun
+apiRouter.get('/ping', (req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json({ ok: true }); });
 apiRouter.use('/admin', require('./routes/admin'));
 apiRouter.use('/tv', require('./routes/tv'));
 apiRouter.use('/', require('./routes/media'));

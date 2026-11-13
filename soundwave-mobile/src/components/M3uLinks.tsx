@@ -1,5 +1,6 @@
 /** Pengaturan link M3U (seperti "Buka stream jaringan" di VLC) — dipakai di menu Akun. */
 import React, { useEffect, useState } from 'react';
+import { errText } from '../lib/api';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -18,7 +19,7 @@ export function M3uLinks() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
-  useEffect(() => { tvApi.m3uLinks().then(setLinks).catch((e) => { setLinks([]); setErr(e.message); }); }, []);
+  useEffect(() => { tvApi.m3uLinks().then(setLinks).catch((e) => { setLinks([]); setErr(errText(e)); }); }, []);
 
   const add = async () => {
     if (!/^https?:\/\/\S+$/i.test(url.trim())) { setErr(T('Link harus diawali http:// atau https://')); return; }
@@ -28,11 +29,11 @@ export function M3uLinks() {
       ui.toast(T('{n}: {c} saluran ditambahkan', { n: r.link.name, c: r.link.count }));
       setUrl(''); setName('');
       setLinks(await tvApi.m3uLinks());
-    } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+    } catch (e: any) { setErr(errText(e)); } finally { setBusy(false); }
   };
   const remove = async (l: M3uLink) => {
     if (!(await ui.confirm({ title: T('Hapus link?'), message: T('“{n}” akan dihapus dari akun Anda.', { n: l.name }), ok: T('Hapus'), danger: true }))) return;
-    try { setLinks(await tvApi.m3uDel(l.id)); ui.toast(T('Link dihapus')); } catch (e: any) { ui.toast(e.message, true); }
+    try { setLinks(await tvApi.m3uDel(l.id)); ui.toast(T('Link dihapus')); } catch (e: any) { ui.toast(errText(e), true); }
   };
   const openIn = async (l: M3uLink) => {
     try {

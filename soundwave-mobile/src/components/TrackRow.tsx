@@ -48,7 +48,7 @@ function Row({ track: t, active, favorite, onPress, onMore, onOffline, showSourc
           {showSource && t.local ? <Text style={s.local}>  {T('HP')}</Text> : null}
         </Text>
         <Text style={s.sub} numberOfLines={1}>
-          {[t.artist, fmtDur(t.duration), t.available === false ? (t.local ? T('tidak ada di HP ini') : T('tidak ada di Drive')) : ''].filter(Boolean).join(' · ')}
+          {[t.artist, fmtDur(t.duration), t.available === false ? (t.unavailableReason || (t.local ? T('tidak ada di HP ini') : T('tidak ada di Drive'))) : ''].filter(Boolean).join(' · ')}
         </Text>
       </View>
       {extra}

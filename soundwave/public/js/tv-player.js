@@ -280,6 +280,7 @@ const onMusicPlay = () => { if (ui && !ui.video.paused) ui.video.pause(); };
 
 /** Buka pemutar TV untuk `list[index]`. opts: { isFav(it), toggleFav(it), onPlay(it) } */
 export function openTv(list, index, opts = {}) {
+  if (navigator.onLine === false) { toast('TV tidak bisa diputar saat offline. Sambungkan ke internet lalu coba lagi.', { type: 'error' }); return; }
   if (!ui) build();
   ctx = { list, index, opts };
   play(index);

@@ -4,11 +4,13 @@ import { T } from '../../lib/i18n';
 import { ActivityIndicator, FlatList, Keyboard, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { WebView } from 'react-native-webview';
 import { router } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
-import { embedUrl, get, jobFileUrl, post } from '../../lib/api';
+import { embedUrl, get, jobFileUrl, post, errText, isOnline } from '../../lib/api';
+import { SafeWebView } from '../../components/SafeWebView';
+import { useOnline } from '../../lib/net';
+import { OfflineNotice } from '../../components/OfflineNotice';
 import { useAuth } from '../../lib/auth';
 import { useLibrary } from '../../lib/library';
 import { usePlayer } from '../../lib/player';
@@ -20,6 +22,7 @@ import type { Job, SearchResult } from '../../lib/types';
 const QUALITIES = { mp3: [128, 192, 256, 320], mp4: [360, 480, 720, 1080] } as const;
 
 export default function SearchScreen() {
+  const online = useOnline();
   const [q, setQ] = useState('');
   const [sugg, setSugg] = useState<string[]>([]);
   const [results, setResults] = useState<SearchResult[] | null>(null);
@@ -58,13 +61,14 @@ export default function SearchScreen() {
   const search = async (term: string) => {
     if (!term.trim()) return;
     Keyboard.dismiss();
+    if (!isOnline()) { setErr(T('Pencarian lagu butuh internet. Sambungkan HP ke internet lalu coba lagi.')); return; }
     searched.current = term.trim();
     closeSugg();
     setQ(term); setErr(''); setLoading(true); setOpen(null); setPreview(null);
     try {
       const r = await get<{ results: SearchResult[] }>(`/api/search?q=${encodeURIComponent(term.trim())}`, { timeout: 45000 });
       setResults(r.results);
-    } catch (e: any) { setErr(e.message); setResults(null); } finally { setLoading(false); }
+    } catch (e: any) { setErr(errText(e)); setResults(null); } finally { setLoading(false); }
   };
 
   return (
@@ -87,8 +91,9 @@ export default function SearchScreen() {
         </View>
       ) : null}
 
+      {!online ? <View style={{ marginTop: 12 }}><OfflineNotice title={T('Pencarian & unduhan butuh internet')} text={T('Saat offline, putar lagu yang sudah diunduh dari Pustaka (tombol awan di daftar lagu).')} /></View> : null}
       {loading ? <ActivityIndicator color={C.accent} style={{ marginTop: 32 }} /> : null}
-      {err ? <Text style={s.err}>{err}</Text> : null}
+      {err && online ? <Text style={s.err}>{err}</Text> : null}
       {!loading && !results && !err ? (
         <View style={s.hero}>
           <Text style={s.heroTitle}>{T('Sound')}<Text style={{ color: C.accent }}>{T('Wave')}</Text></Text>
@@ -148,7 +153,7 @@ function ResultCard({ item, open, previewing, onToggle, onPreview }: {
       </View>
       {previewing ? (
         <View style={s.preview}>
-          <WebView source={{ uri: embedUrl(item.id) }} allowsInlineMediaPlayback mediaPlaybackRequiresUserAction={false}
+          <SafeWebView source={{ uri: embedUrl(item.id) }} allowsInlineMediaPlayback mediaPlaybackRequiresUserAction={false}
             allowsFullscreenVideo style={{ backgroundColor: '#000' }} />
         </View>
       ) : null}
@@ -179,7 +184,7 @@ function ConvertPanel({ item }: { item: SearchResult }) {
       if (j.status === 'error') setErr(j.error || T('Konversi gagal.'));
       else if (j.status !== 'done') poll.current = setTimeout(() => track(id), 1000);
       else if (j.driveLink) setDriveLink(j.driveLink);
-    } catch (e: any) { setErr(e.message); }
+    } catch (e: any) { setErr(errText(e)); }
   };
 
   const convert = async () => {
@@ -188,7 +193,7 @@ function ConvertPanel({ item }: { item: SearchResult }) {
       const j = await post<Job>('/api/convert', { videoId: item.id, format, quality });
       setJob(j);
       if (j.status !== 'done') track(j.id); else if (j.driveLink) setDriveLink(j.driveLink);
-    } catch (e: any) { setErr(e.message); } finally { setBusy(''); }
+    } catch (e: any) { setErr(errText(e)); } finally { setBusy(''); }
   };
 
   const saveDrive = async () => {
@@ -199,7 +204,7 @@ function ConvertPanel({ item }: { item: SearchResult }) {
       setDriveLink(r.link);
       ui.toast(T('Tersimpan ke Google Drive'));
       lib.load(true);
-    } catch (e: any) { ui.toast(e.message, true); } finally { setBusy(''); }
+    } catch (e: any) { ui.toast(errText(e), true); } finally { setBusy(''); }
   };
 
   const saveDevice = async () => {
@@ -212,7 +217,7 @@ function ConvertPanel({ item }: { item: SearchResult }) {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(file.uri, { mimeType: format === 'mp3' ? 'audio/mpeg' : 'video/mp4', dialogTitle: T('Simpan file'), UTI: format === 'mp3' ? 'public.mp3' : 'public.mpeg-4' });
       } else ui.toast(T('Tersimpan: {f}', { f: file.uri }));
-    } catch (e: any) { ui.toast(T('Gagal mengunduh: {e}', { e: e.message }), true); } finally { setBusy(''); }
+    } catch (e: any) { ui.toast(T('Gagal mengunduh: {e}', { e: errText(e) }), true); } finally { setBusy(''); }
   };
 
   const driveReady = Boolean(user?.drive.ready ?? (user?.drive.connected && user?.drive.folderId)) && !user?.drive.readOnly;

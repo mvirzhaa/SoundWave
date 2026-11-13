@@ -8,7 +8,8 @@ import { ActivityIndicator, BackHandler, FlatList, Platform, Pressable, RefreshC
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import { get, post } from '../../lib/api';
+import { get, post, errText } from '../../lib/api';
+import { getCached } from '../../lib/cache';
 import { useAuth } from '../../lib/auth';
 import { useLibrary } from '../../lib/library';
 import { usePlayer } from '../../lib/player';
@@ -73,16 +74,19 @@ export default function LibraryScreen() {
 
   const [plError, setPlError] = useState('');
   const [plLoading, setPlLoading] = useState(false);
+  const [plStale, setPlStale] = useState(false);
   const loadPlaylists = useCallback(async (attempt = 0): Promise<void> => {
     setPlLoading(true);
     try {
-      const r = await get<{ special: PlaylistSummary[]; playlists: PlaylistSummary[] }>('/api/library/playlists', { timeout: 20000 });
+      const { data: r, stale } = await getCached<{ special: PlaylistSummary[]; playlists: PlaylistSummary[] }>('playlists', '/api/library/playlists', { timeout: 20000 });
       setPlaylists({ special: r.special || [], playlists: r.playlists || [] });
+      setPlStale(stale);
       setPlError('');
     } catch (e: any) {
+      if (e?.status === 0) { setPlError(errText(e)); return; } // offline tanpa salinan: tidak perlu coba ulang
       // Satu kali coba ulang otomatis (jaringan sesaat terputus / server sibuk), lalu tampilkan pesan
       if (attempt < 1) { await new Promise((ok) => setTimeout(ok, 1500)); return loadPlaylists(attempt + 1); }
-      setPlError(e.message || T('Gagal memuat playlist.'));
+      setPlError(errText(e) || T('Gagal memuat playlist.'));
     } finally { setPlLoading(false); }
   }, []);
   useFocusEffect(useCallback(() => { if (tab === 'playlist') loadPlaylists(); }, [tab, lib.playlistsVersion, loadPlaylists]));
@@ -131,7 +135,7 @@ export default function LibraryScreen() {
 
   const toggleOffline = async (t: Track) => {
     if (isOffline(t.id)) { removeOffline(t.id); ui.toast(T('Unduhan offline dihapus')); return; }
-    try { await downloadOffline(t); ui.toast(T('“{t}” tersedia offline', { t: t.title })); } catch (e: any) { ui.toast(T('Gagal mengunduh: {e}', { e: e.message }), true); }
+    try { await downloadOffline(t); ui.toast(T('“{t}” tersedia offline', { t: t.title })); } catch (e: any) { ui.toast(T('Gagal mengunduh: {e}', { e: errText(e) }), true); }
   };
 
   /** Menu pengaturan sumber HP: pindai HP, tambah folder, impor file. */
@@ -142,11 +146,11 @@ export default function LibraryScreen() {
       Platform.OS === 'android' && {
         label: lib.localSettings.device ? T('Berhenti memindai semua lagu di HP') : T('Pindai semua lagu di HP'),
         icon: 'phone-portrait-outline',
-        onPress: () => lib.setDeviceScan(!lib.localSettings.device).catch((e) => ui.toast(e.message, true)),
+        onPress: () => lib.setDeviceScan(!lib.localSettings.device).catch((e) => ui.toast(errText(e), true)),
       },
-      { label: T('Tambah folder musik…'), icon: 'folder-open-outline', onPress: () => lib.addFolder().catch((e) => ui.toast(e.message, true)) },
+      { label: T('Tambah folder musik…'), icon: 'folder-open-outline', onPress: () => lib.addFolder().catch((e) => ui.toast(errText(e), true)) },
       { label: T('Impor file audio…'), icon: 'document-attach-outline', onPress: async () => {
-        try { const n = await lib.importLocal(); if (n) ui.toast(T('{n} file diimpor', { n })); } catch (e: any) { ui.toast(e.message, true); }
+        try { const n = await lib.importLocal(); if (n) ui.toast(T('{n} file diimpor', { n })); } catch (e: any) { ui.toast(errText(e), true); }
       } },
       ...lib.localSettings.folders.map((f) => ({ label: T('Hapus folder: {f}', { f: f.name }), icon: 'remove-circle-outline' as const, onPress: () => lib.removeFolder(f.uri) })),
       { label: T('Pindai ulang'), icon: 'refresh', onPress: () => lib.scanLocal() },
@@ -176,9 +180,9 @@ export default function LibraryScreen() {
             </View>
             {src === 'hp' ? (
               <View style={{ gap: 8, alignSelf: 'stretch' }}>
-                {Platform.OS === 'android' ? <Button label={T("Pindai semua lagu di HP")} icon="search" onPress={() => lib.setDeviceScan(true).catch((e) => ui.toast(e.message, true))} /> : null}
-                <Button label={T("Pilih folder musik")} icon="folder-open-outline" kind="ghost" onPress={() => lib.addFolder().catch((e) => ui.toast(e.message, true))} />
-                <Button label={T("Impor file audio")} icon="document-attach-outline" kind="ghost" onPress={async () => { try { const n = await lib.importLocal(); if (n) ui.toast(T('{n} file diimpor', { n })); } catch (e: any) { ui.toast(e.message, true); } }} />
+                {Platform.OS === 'android' ? <Button label={T("Pindai semua lagu di HP")} icon="search" onPress={() => lib.setDeviceScan(true).catch((e) => ui.toast(errText(e), true))} /> : null}
+                <Button label={T("Pilih folder musik")} icon="folder-open-outline" kind="ghost" onPress={() => lib.addFolder().catch((e) => ui.toast(errText(e), true))} />
+                <Button label={T("Impor file audio")} icon="document-attach-outline" kind="ghost" onPress={async () => { try { const n = await lib.importLocal(); if (n) ui.toast(T('{n} file diimpor', { n })); } catch (e: any) { ui.toast(errText(e), true); } }} />
                 {Platform.OS === 'ios' ? <Text style={s.hint}>{T('Di iPhone, lagu dari aplikasi Musik (Apple Music) tidak bisa diakses aplikasi lain. Gunakan folder di app File atau impor file.')}</Text> : null}
               </View>
             ) : <Pressable onPress={localMenu} hitSlop={8}><Text style={s.link}>{T('Tambah')}</Text></Pressable>}
@@ -222,7 +226,12 @@ export default function LibraryScreen() {
         <View style={s.filter}>
           <Ionicons name="search" size={16} color={C.muted} />
           <TextInput value={filter} onChangeText={setFilter} placeholder={tab === 'playlist' ? T('Cari playlist…') : T('Cari judul, artis, album…')}
-            placeholderTextColor={C.muted} style={s.filterInput} />
+            placeholderTextColor={C.muted} style={s.filterInput} returnKeyType="search" />
+          {filter ? (
+            <Pressable onPress={() => setFilter('')} hitSlop={10} accessibilityRole="button" accessibilityLabel={T('Hapus pencarian')}>
+              <Ionicons name="close-circle" size={18} color={C.muted} />
+            </Pressable>
+          ) : null}
         </View>
         {tab !== 'playlist' && src !== 'hp' && driveReady ? (
           <Pressable onPress={() => setOfflineOnly((v) => !v)} style={[s.offBtn, offlineOnly && { borderColor: C.ok }]} accessibilityLabel={T("Mode offline Drive")}>
@@ -260,11 +269,14 @@ export default function LibraryScreen() {
     const createPl = async () => {
       const name = await ui.prompt({ title: T('Playlist baru'), placeholder: T('Nama playlist'), ok: T('Buat') });
       if (!name) return;
-      try { const p = await post<{ id: number }>('/api/library/playlists', { name }); lib.bumpPlaylists(); router.push(`/playlist/${p.id}`); } catch (e: any) { ui.toast(e.message, true); }
+      try { const p = await post<{ id: number }>('/api/library/playlists', { name }); lib.bumpPlaylists(); router.push(`/playlist/${p.id}`); } catch (e: any) { ui.toast(errText(e), true); }
     };
     return (
       <ScrollView refreshControl={refresh} contentContainerStyle={{ paddingBottom: 24 }}>
         {header}
+        {plStale && !plError ? (
+          <Text style={s.banner}>{T('Sedang offline — menampilkan salinan playlist terakhir. Hanya lagu yang sudah diunduh yang bisa diputar.')}</Text>
+        ) : null}
         {plError ? (
           <Pressable style={s.plErr} onPress={() => loadPlaylists()}>
             <Ionicons name="cloud-offline-outline" size={20} color={C.warn} />

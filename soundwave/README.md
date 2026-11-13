@@ -169,6 +169,16 @@ Ketersediaan siaran bergantung pada penyiar: sebagian dibatasi wilayah (label *G
 siar tetap milik penyiar; SoundWave hanya memutar siaran yang disediakan gratis untuk publik, siaran resmi di
 YouTube, link dari admin, dan link M3U yang ditambahkan pengguna sendiri (tanggung jawab pemilik link).
 
+## Hafalan rentang ayat & mode offline (v14)
+
+- **Hafalan rentang ayat** (web & HP): menu ⋮ surat → *Ulangi / hafalan* → **Pilih rentang ayat** — ayat awal &
+  akhir bebas, tiap ayat diulang sekali/3/7/11/20/40×, opsional rentang diulang terus. Pada ayat yang sedang
+  diputar ada *Hafalan mulai dari ayat ini…*. API: `GET /api/quran/hafalan/:surat?qari=&ulang=&dari=&sampai=`.
+- **Kolom cari** Pustaka, Cari, Radio, TV, dan daftar surat punya tombol ✕ untuk menghapus teks sekaligus.
+- **Offline** (web): lirik, radio, dan TV memberi info bahwa fitur itu butuh internet; lirik dimuat otomatis saat
+  online kembali. Aplikasi HP: lihat README aplikasi (unduh seluruh playlist, salinan playlist di HP, dll.).
+- `GET /api/ping` — cek koneksi ringan (dipakai aplikasi HP untuk mendeteksi kembali online).
+
 ## Pilih banyak, urutkan playlist, maju/mundur 10 detik
 
 - **Pilih banyak lagu**: tekan lama sebuah lagu (atau Ctrl/⌘-klik) di Pustaka → ketuk lagu lain → bar bawah:

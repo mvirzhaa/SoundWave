@@ -1,5 +1,8 @@
 /** Tab TV: Pilihan (YouTube Live resmi & saluran admin), Indonesia, Dunia, Favorit, Link M3U milik pengguna. */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { errText, isOnline } from '../../lib/api';
+import { useOnline } from '../../lib/net';
+import { OfflineNotice } from '../../components/OfflineNotice';
 import { ActivityIndicator, FlatList, Keyboard, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -68,8 +71,10 @@ export default function TvScreen() {
     return { total: list.length, offset: 0, items: list };
   };
 
+  const online = useOnline();
   const load = useCallback(async (reset: boolean) => {
     if (!ready) return;
+    if (!isOnline()) { setLoading(false); setMore(false); return; } // TV butuh internet
     if (!reset && (more || loading || items.length >= total)) return;
     const my = ++seq.current;
     if (reset) { setLoading(true); setErr(''); } else setMore(true);
@@ -81,7 +86,7 @@ export default function TvScreen() {
     } catch (e: any) {
       if (my !== seq.current) return;
       if (reset) { setItems([]); setTotal(0); }
-      setErr(e.message || T('Gagal memuat saluran.'));
+      setErr(errText(e) || T('Gagal memuat saluran.'));
     } finally {
       if (my === seq.current) { setLoading(false); setMore(false); }
     }
@@ -93,7 +98,7 @@ export default function TvScreen() {
     if (debounce.current) clearTimeout(debounce.current);
     debounce.current = setTimeout(() => load(true), q ? 400 : 0);
     return () => { if (debounce.current) clearTimeout(debounce.current); };
-  }, [ready, st.tab, st.negara, st.kategori, st.m3u, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready, st.tab, st.negara, st.kategori, st.m3u, q, online]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (links.length && !links.some((l) => l.id === st.m3u)) update({ m3u: links[0].id });
@@ -105,12 +110,13 @@ export default function TvScreen() {
 
   const open = (i: number) => {
     Keyboard.dismiss();
+    if (!isOnline()) { ui.toast(T('TV tidak bisa diputar saat offline. Sambungkan ke internet lalu coba lagi.'), true); return; }
     setTvQueue(items, i);
     router.push('/tv-player');
   };
   const fav = async (it: TvItem) => {
     try { const on = await toggleTvFav(it); ui.toast(on ? T('{n} ditambahkan ke favorit', { n: it.name }) : T('{n} dihapus dari favorit', { n: it.name })); }
-    catch (e: any) { ui.toast(e.message, true); }
+    catch (e: any) { ui.toast(errText(e), true); }
   };
 
   const favSet = useMemo(() => new Set(favs.map((f) => f.id)), [favs]);
@@ -126,6 +132,7 @@ export default function TvScreen() {
           style={s.input} returnKeyType="search" autoCorrect={false} />
         {q ? <Pressable onPress={() => setQ('')} hitSlop={8}><Ionicons name="close-circle" size={18} color={C.muted} /></Pressable> : null}
       </View>
+      {!online ? <View style={{ marginTop: 12 }}><OfflineNotice title={T('TV tidak bisa diputar saat offline')} /></View> : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabs} keyboardShouldPersistTaps="handled">
         {TABS.filter(([k]) => k !== 'm3u' || links.length).map(([k, label]) => (
           <Pressable key={k} onPress={() => update({ tab: k, ...(k === 'id' || k === 'dunia' ? {} : { kategori: '' }) })}
@@ -167,7 +174,7 @@ export default function TvScreen() {
     </View>
   );
 
-  const empty = loading ? (
+  const empty = !online ? undefined : loading ? (
     <View style={s.grid}>
       {Array.from({ length: cols * 3 }, (_, i) => <View key={i} style={[s.skel, { width: cardW, height: cardW * 9 / 16 }]} />)}
     </View>

@@ -865,3 +865,37 @@ body.tv-open { overflow: hidden; }
 :root[data-theme="dark"] .pl-dot { color: hsl(var(--h, 255) 85% 88%); background: hsl(var(--h, 255) 55% 34%); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pl-dot { color: hsl(var(--h, 255) 85% 88%); background: hsl(var(--h, 255) 55% 34%); } }
 .pl-dot.more { background: var(--surface-2) !important; color: var(--muted) !important; }
+
+/* Kolom cari dengan tombol ✕ (hapus sekaligus) */
+.filter-wrap { position: relative; display: flex; align-items: center; flex: 1; min-width: 0; }
+.filter-wrap > input { flex: 1; min-width: 0; padding-right: 40px; }
+.filter-wrap > input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
+.filter-clear { position: absolute; right: 6px; width: 30px; height: 30px; border: 0; border-radius: 50%; display: grid; place-items: center;
+  background: var(--surface-2); color: var(--muted); cursor: pointer; }
+.filter-clear:hover { color: var(--text); }
+.filter-clear[hidden] { display: none; }
+.filter-clear svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.search-box .filter-wrap > input { border: 0; background: transparent; box-shadow: none; outline: none; }
+
+/* Hafalan rentang ayat */
+.dialog.hafalan { width: min(560px, 100%); display: grid; gap: 12px; }
+.dialog.hafalan h3 small { font-weight: 500; }
+.hf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 520px) { .hf-grid { grid-template-columns: 1fr; } }
+.hf-field { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.hf-field label, .hf-label { font-weight: 700; font-size: 13px; color: var(--muted); margin: 0; }
+.hf-row { display: flex; align-items: center; gap: 8px; }
+.hf-num { width: 80px; text-align: center; font-size: 18px; font-weight: 800; padding: 8px !important; }
+.hf-step { border: 1px solid var(--border); }
+.hf-prev { min-height: 44px; }
+.hf-arab { font-family: 'Amiri', serif; font-size: 20px; line-height: 1.7; margin: 0; text-align: right; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.hf-prev small { color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hf-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.hf-chips .chip-src[aria-pressed="true"], .hf-chips .chip-src[aria-checked="true"] { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.hf-loop { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid var(--border); border-radius: 14px; cursor: pointer; }
+.hf-loop input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); }
+.hf-loop span { display: grid; gap: 2px; }
+.hf-loop small { color: var(--muted); }
+.hf-sum { margin: 0; font-weight: 600; }
+.dialog.hafalan { max-height: calc(100dvh - 48px); overflow-y: auto; overscroll-behavior: contain; }
+@media (max-width: 720px) { .dialog.hafalan { max-height: calc(100dvh - var(--nav-h) - 40px - env(safe-area-inset-bottom)); } .dialog.hafalan .btn-row { position: sticky; bottom: -1px; background: var(--surface); padding: 10px 0 2px; } }

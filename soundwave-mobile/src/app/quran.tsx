@@ -4,7 +4,11 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, Vi
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { T } from '../lib/i18n';
-import { get } from '../lib/api';
+import { errText } from '../lib/api';
+import { getCached } from '../lib/cache';
+import { useOnline } from '../lib/net';
+import { isOffline } from '../lib/offline';
+import { DownloadAll } from '../components/DownloadAll';
 import { usePlayer } from '../lib/player';
 import { useSholat } from '../lib/sholat';
 import { useUi } from '../lib/ui';
@@ -28,20 +32,24 @@ export default function QuranScreen() {
   const [p, setP] = useState<QuranPl | null>(null);
   const [err, setErr] = useState('');
   const [filter, setFilter] = useState('');
+  const [stale, setStale] = useState(false);
+  const online = useOnline();
 
   const load = useCallback((q: { qari?: string; semua?: boolean } = {}) => {
     const qs = new URLSearchParams();
     if (q.qari) qs.set('qari', q.qari);
     if (q.semua != null) qs.set('semua', q.semua ? '1' : '0');
-    get<QuranPl>(`/api/library/playlists/quran?${qs}`).then((r) => { setP(r); setErr(''); }).catch((e) => setErr(e.message));
+    getCached<QuranPl>(`quran-${qs}`, `/api/library/playlists/quran?${qs}`)
+      .then(({ data, stale: st }) => { setP(data); setStale(st); setErr(''); }).catch((e) => setErr(errText(e)));
   }, []);
   useEffect(() => { load(); }, [load]);
 
   const items = useMemo(() => {
     if (!p) return [];
     const f = norm(filter.trim());
-    return f ? p.items.filter((t) => norm(`${t.title} ${t.quran?.arti} ${t.quran?.surat}`).includes(f)) : p.items;
-  }, [p, filter]);
+    const all = online ? p.items : p.items.map((t) => (isOffline(t.id) ? t : { ...t, available: false, unavailableReason: T('belum diunduh — butuh internet') }));
+    return f ? all.filter((t) => norm(`${t.title} ${t.quran?.arti} ${t.quran?.surat}`).includes(f)) : all;
+  }, [p, filter, online, lib.offlineVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (err) return <Text style={{ color: C.danger, padding: 24 }}>{err}</Text>;
   if (!p) return <ActivityIndicator color={C.accent} style={{ marginTop: 40 }} />;
@@ -69,9 +77,11 @@ export default function QuranScreen() {
           <Text style={s.title}>{T('Hapalan Quran')}</Text>
           <Text style={s.muted}>{p.items.length} surat · {qariName}</Text>
           <View style={s.actions}>
-            <Button label={T("Putar")} icon="play" onPress={() => player.playList(p.items, 0, { shuffle: false, source: 'Hapalan Quran' })} style={{ flex: 1 }} />
-            <Button label={T("Acak")} icon="shuffle" kind="ghost" onPress={() => player.playList(p.items, null, { shuffle: true, source: 'Hapalan Quran' })} style={{ flex: 1 }} />
+            <Button label={T("Putar")} icon="play" onPress={() => player.playList(items, Math.max(0, items.findIndex((t) => t.available !== false)), { shuffle: false, source: 'Hapalan Quran' })} style={{ flex: 1 }} />
+            <Button label={T("Acak")} icon="shuffle" kind="ghost" onPress={() => player.playList(items, null, { shuffle: true, source: 'Hapalan Quran' })} style={{ flex: 1 }} />
           </View>
+          {stale || !online ? <Text style={s.offNote}>{T('Sedang offline — hanya surat yang sudah diunduh yang bisa diputar.')}</Text> : null}
+          <DownloadAll id={`quran-${p.qari}-${p.semua ? 'semua' : 'juz30'}`} label={T('Hapalan Quran')} tracks={p.items} />
           <Pressable style={s.qari} onPress={pickQari}>
             <Ionicons name="mic-outline" size={20} color={C.accent} />
             <Text style={{ color: C.text, flex: 1, fontWeight: '600' }}>Qari: {qariName}</Text>
@@ -81,7 +91,14 @@ export default function QuranScreen() {
             <Chip label={T("Juz 30 + Al-Fatihah")} active={!p.semua} onPress={() => setScope(false)} />
             <Chip label={T("Semua 114 surat")} active={p.semua} onPress={() => setScope(true)} />
           </View>
-          <TextInput style={s.input} value={filter} onChangeText={setFilter} placeholder={T("Cari surat…")} placeholderTextColor={C.muted} />
+          <View style={{ alignSelf: 'stretch', justifyContent: 'center' }}>
+            <TextInput style={s.input} value={filter} onChangeText={setFilter} placeholder={T("Cari surat…")} placeholderTextColor={C.muted} />
+            {filter ? (
+              <Pressable onPress={() => setFilter('')} hitSlop={10} style={s.clear} accessibilityLabel={T('Hapus pencarian')}>
+                <Ionicons name="close-circle" size={18} color={C.muted} />
+              </Pressable>
+            ) : null}
+          </View>
           <Text style={s.hint}>{T('Ketuk nama Arab untuk membaca surat, atau ⋮ → “Ulangi / hafalan” untuk mengulang. Teks Arab, Latin & terjemahan juga tampil di tab Ayat pemutar.')}</Text>
         </View>
       }
@@ -105,6 +122,8 @@ export default function QuranScreen() {
 
 const s = themed(() => StyleSheet.create({
   head: { alignItems: 'center', padding: 16, gap: 8 },
+  offNote: { color: C.warn, fontSize: 13, textAlign: 'center' },
+  clear: { position: 'absolute', right: 12 },
   eyebrow: { color: C.muted, fontSize: 11, fontWeight: '800', letterSpacing: 1.2, marginTop: 8 },
   title: { color: C.text, fontSize: 28, fontWeight: '800' },
   muted: { color: C.muted },

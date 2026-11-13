@@ -6,7 +6,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { AudioPlaylist, AudioSource, createAudioPlaylist, setAudioModeAsync } from 'expo-audio';
-import { getServer, mediaToken, ytThumb } from './api';
+import { getServer, isOnline, mediaToken, ytThumb } from './api';
 import { offlineUri } from './offline';
 import { useLibrary } from './library';
 import type { Track } from './types';
@@ -234,15 +234,25 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const playList = async (tracks: Track[], start: number | null = 0, opts: { shuffle?: boolean; source?: string; repeat?: Repeat } = {}) => {
     if (!pl.current) return;
     const wanted = start == null ? null : tracks[start];
+    if (wanted?.available === false && wanted.unavailableReason) { say(T('Sedang offline. “{t}” belum diunduh untuk offline.', { t: wanted.title })); return; }
     const list = tracks.filter((t) => t && t.available !== false && (!t.local || t.uri));
-    if (!list.length) return;
-    if (list.every((t) => t.radio)) return playRadio(list, wanted ? Math.max(0, list.indexOf(wanted)) : 0, opts.source);
+    if (!list.length) { if (!isOnline()) say(T('Sedang offline dan belum ada lagu yang diunduh.')); return; }
+    if (list.every((t) => t.radio)) {
+      if (!isOnline()) { say(T('Radio tidak bisa diputar saat offline. Sambungkan ke internet lalu coba lagi.')); return; }
+      return playRadio(list, wanted ? Math.max(0, list.indexOf(wanted)) : 0, opts.source);
+    }
     radioList.current = [];
     if (radioWatch.current) { clearTimeout(radioWatch.current); radioWatch.current = null; }
     const seq = ++playSeq.current;
     // Token hanya perlu untuk streaming dari server; lagu di HP / offline / murottal langsung diputar tanpa menunggu
     let list2 = list;
-    const needsToken = list.some((t) => !(t.local && t.uri) && !offlineUri(t.id) && !(t.url && /^(quran|radio)-/.test(t.id)));
+    // Sudah diketahui offline → langsung pakai lagu yang tersimpan di HP saja (tanpa menunggu server)
+    if (!isOnline()) {
+      list2 = list.filter(playableOffline);
+      if (wanted && !playableOffline(wanted)) { say(T('Sedang offline. “{t}” belum diunduh untuk offline.', { t: wanted.title })); return; }
+      if (!list2.length) { say(T('Sedang offline dan belum ada lagu yang diunduh.')); return; }
+    }
+    const needsToken = isOnline() && list.some((t) => !(t.local && t.uri) && !offlineUri(t.id) && !(t.url && /^(quran|radio)-/.test(t.id)));
     if (needsToken) {
       try {
         tokenRef.current = await Promise.race([mediaToken(), new Promise<string>((_, no) => setTimeout(() => no(Object.assign(new Error('timeout'), { status: 0 })), 6000))]);
@@ -285,6 +295,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   /** Radio: ganti stasiun tanpa membangun ulang antrean panjang; pengawas 20 detik untuk stasiun yang mati. */
   function playRadio(list: Track[], i: number, src?: string) {
     if (!pl.current) return;
+    if (!isOnline()) { say(T('Radio tidak bisa diputar saat offline. Sambungkan ke internet lalu coba lagi.')); return; }
     const seq = ++playSeq.current;
     radioList.current = list;
     const t = list[i];

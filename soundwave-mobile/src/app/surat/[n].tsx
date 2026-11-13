@@ -1,9 +1,9 @@
 /** Baca surat: teks Arab, Latin & terjemahan Kemenag. Ketuk ayat untuk memutar mulai dari ayat itu. */
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { get } from '../../lib/api';
+import { get, errText } from '../../lib/api';
 import { usePlayer } from '../../lib/player';
 import { useUi } from '../../lib/ui';
 import { Button } from '../../components/Common';
@@ -24,7 +24,7 @@ export default function SuratScreen() {
   const [arti, setArti] = useState(true);
   const list = useRef<FlatList<Ayat>>(null);
 
-  const load = () => { setErr(''); get<Surat>(`/api/quran/surat/${n}`, { timeout: 30000 }).then(setData).catch((e) => setErr(e.message)); };
+  const load = () => { setErr(''); get<Surat>(`/api/quran/surat/${n}`, { timeout: 30000 }).then(setData).catch((e) => setErr(errText(e))); };
   useEffect(load, [n]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cur = player.current?.quran;
@@ -37,7 +37,7 @@ export default function SuratScreen() {
     try {
       const r = await get<{ items: Track[]; surat: { namaLatin: string } }>(`/api/quran/hafalan/${n}?qari=${qari}&ulang=${ulang}&dari=${dari}`);
       await player.playList(r.items, 0, { shuffle: false, source: r.surat.namaLatin, repeat: 'off' });
-    } catch (e: any) { ui.toast(e.message, true); }
+    } catch (e: any) { ui.toast(errText(e), true); }
   };
 
   if (err) return <View style={s.center}><Text style={{ color: C.danger, textAlign: 'center' }}>{err}</Text><Button label={T('Coba lagi')} kind="ghost" onPress={load} /></View>;
@@ -63,11 +63,13 @@ export default function SuratScreen() {
               <Pressable style={[s.toggle, latin && s.toggleOn]} onPress={() => setLatin((v) => !v)}><Text style={[s.toggleText, latin && { color: C.accent }]}>Latin</Text></Pressable>
               <Pressable style={[s.toggle, arti && s.toggleOn]} onPress={() => setArti((v) => !v)}><Text style={[s.toggleText, arti && { color: C.accent }]}>{T('Arti')}</Text></Pressable>
             </View>
-            <Text style={s.hint}>{T('Ketuk ayat untuk memutar mulai dari ayat itu. Tekan lama untuk mengulang ayat itu 3×.')}</Text>
+            <Button label={T('Hafalan: pilih rentang ayat & pengulangan')} icon="repeat" kind="ghost" style={{ alignSelf: 'stretch' }}
+              onPress={() => router.push({ pathname: '/hafalan', params: { surat: String(n), qari } })} />
+            <Text style={s.hint}>{T('Ketuk ayat untuk memutar mulai dari ayat itu. Tekan lama untuk hafalan mulai dari ayat itu.')}</Text>
           </View>
         }
         renderItem={({ item }) => (
-          <Pressable onPress={() => playFrom(item.nomorAyat)} onLongPress={() => playFrom(item.nomorAyat, 3)}
+          <Pressable onPress={() => playFrom(item.nomorAyat)} onLongPress={() => router.push({ pathname: '/hafalan', params: { surat: String(n), qari, dari: String(item.nomorAyat) } })}
             style={({ pressed }) => [s.ayat, item.nomorAyat === activeAyat && s.ayatOn, pressed && { opacity: 0.8 }]}>
             <View style={s.numRow}>
               <View style={s.num}><Text style={s.numText}>{item.nomorAyat}</Text></View>

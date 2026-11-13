@@ -1,5 +1,6 @@
 /** Daftar pengumuman dari admin (tersimpan). Membuka layar ini menandai semuanya sudah dibaca. */
 import React, { useEffect, useState } from 'react';
+import { errText } from '../lib/api';
 import { FlatList, RefreshControl, Text } from 'react-native';
 import { AnnouncementCard, loadAnnouncements, markRead, useAnnouncements } from '../components/Announcements';
 import { Empty } from '../components/Common';
@@ -12,7 +13,7 @@ export default function PengumumanScreen() {
   const [err, setErr] = useState('');
   const refresh = async () => {
     setLoading(true);
-    try { await loadAnnouncements(); setErr(''); } catch (e: any) { setErr(e.message); } finally { setLoading(false); }
+    try { await loadAnnouncements(); setErr(''); } catch (e: any) { setErr(errText(e)); } finally { setLoading(false); }
   };
   useEffect(() => { refresh(); }, []);
   useEffect(() => { markRead(list.filter((a) => !a.read).map((a) => a.id)); }, [list]);

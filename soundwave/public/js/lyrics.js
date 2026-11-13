@@ -60,6 +60,11 @@ async function load(t, refresh = false) {
   el.textContent = '';
   if (t.quran) return loadQuran(t, seq);
   if (t.radio) { el.append(h('p.lyrics-msg', { text: 'Lirik tidak tersedia untuk siaran radio.' })); return; }
+  if (navigator.onLine === false) {
+    el.append(h('p.lyrics-msg', { text: 'Lirik tidak dapat dilihat saat offline. Lagu tetap bisa diputar; lirik muncul lagi saat terhubung ke internet.' }));
+    window.addEventListener('online', () => { if (seq === state.seq) load(t); }, { once: true });
+    return;
+  }
   el.append(h('p.lyrics-msg', { text: 'Mencari lirik…' }));
   // Tunggu durasi asli file (lebih akurat untuk pencocokan versi lagu di LRCLIB)
   if (!(media.duration > 0)) {
@@ -80,6 +85,12 @@ async function load(t, refresh = false) {
   } catch (e) {
     if (seq !== state.seq) return;
     el.textContent = '';
+    if (e.status === 0) {
+      // Offline: beri tahu dengan jelas, dan muat otomatis begitu koneksi kembali
+      el.append(h('p.lyrics-msg', { text: 'Lirik tidak dapat dilihat saat offline. Lagu tetap bisa diputar; lirik muncul lagi saat terhubung ke internet.' }));
+      window.addEventListener('online', () => { if (seq === state.seq) load(t); }, { once: true });
+      return;
+    }
     el.append(h('p.lyrics-msg', { text: e.message }), retry(t));
   }
 }
@@ -176,6 +187,6 @@ async function loadQuran(t, seq) {
   } catch (e) {
     if (seq !== state.seq) return;
     el.textContent = '';
-    el.append(h('p.lyrics-msg', { text: e.message }));
+    el.append(h('p.lyrics-msg', { text: e.status === 0 ? 'Teks surat tidak dapat dilihat saat offline.' : e.message }));
   }
 }

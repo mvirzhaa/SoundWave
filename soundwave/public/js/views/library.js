@@ -1,5 +1,5 @@
 /** Pustaka: sumber Google Drive / folder lokal / semua — tab Lagu, Playlist, Artis, Genre. */
-import { h, icon, I, cover, collage, fmtDur, toast, actionMenu, promptDialog, confirmDialog } from '../ui.js';
+import { h, icon, I, cover, collage, fmtDur, toast, actionMenu, promptDialog, confirmDialog, clearable, openOverlay } from '../ui.js';
 import { get, post, put, patch, del } from '../api.js';
 import { store, on, loadTracks, driveReady, toggleFavorite } from '../store.js';
 import { playList, playNext, addToQueue, current } from '../player.js';
@@ -92,6 +92,7 @@ export function trackMenu(t, ctx = {}) {
     } },
     !t.quran && t.artist && t.artist !== 'Tidak diketahui' && { label: `Lihat artis: ${t.artist}`, icon: I.user, run: () => { location.hash = '#/artis/' + encodeURIComponent(t.artist); } },
     t.quran && !t.quran.ayat && { label: 'Ulangi / hafalan…', icon: 'M4 6h16M4 10h10M4 14h12M17 17l2 2 3-4', run: () => hafalanMenu(t) },
+    t.quran?.ayat ? { label: 'Hafalan mulai dari ayat ini…', icon: 'M4 6h10M4 12h16M4 18h7', run: () => hafalanRange(t, t.quran.ayat) } : null,
     !t.local && !t.quran && !store.user?.drive?.readOnly && { label: 'Ganti nama…', icon: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4', run: () => renameTrack(t, ctx) },
     !t.quran && { label: `Ubah genre${t.genre ? ` (${t.genre})` : ''}`, icon: 'M4 7h16M4 12h10M4 17h6', run: () => editGenre(t, ctx) },
     !t.quran && !sholatState.global?.paksa && { label: 'Jadikan suara adzan', icon: 'M12 3c3 2 5 4.5 5 8H7c0-3.5 2-6 5-8zM5 11h14v10H5z', run: async () => {
@@ -259,7 +260,7 @@ export async function renderLibrary(view, params) {
   const tabs = h('div.tabs', { role: 'tablist' });
   const filter = h('input.filter', { type: 'search', placeholder: 'Cari di pustaka…', value: ui.filter });
   const sortSel = h('select.sort', { 'aria-label': 'Urutkan' }, Object.entries(SORTS).map(([k, v]) => h('option', { value: k, text: v, selected: ui.sort === k })));
-  const tools = h('div.lib-tools', {}, filter, sortSel);
+  const tools = h('div.lib-tools', {}, clearable(filter), sortSel);
   const body = h('div.lib-body');
   const fab = h('button.fab', { type: 'button', 'aria-label': 'Putar acak semua' }, icon(I.shuffle), h('span', { text: 'Acak' }));
   page.append(sources, status, tabs, tools, body, fab);
@@ -428,12 +429,85 @@ export function hafalanMenu(t) {
     } catch (e) { toast(e.message, { type: 'error' }); }
   };
   actionMenu(`Ulangi / hafalan · ${t.title}`, [
+    { label: 'Pilih rentang ayat (dari – sampai)…', icon: 'M4 6h10M4 12h16M4 18h7M17 4v4M11 10v4M14 16v4', run: () => hafalanRange(t) },
     { label: 'Ulangi surat utuh (tanpa per ayat)', icon: I.refresh, run: () => {
       playList([t], 0, { shuffle: false, repeat: 'one', source: 'Hapalan Quran' });
       toast(`${t.title} diulang terus. Matikan lewat tombol ulangi di pemutar.`);
     } },
     ...[3, 7, 11, 20, 40].map((n) => ({ label: `Ulangi tiap ayat ${n}×`, icon: I.refresh, run: () => run(n) })),
   ], 'Teks Arab, Latin & terjemahan tampil di panel Lirik pemutar.');
+}
+
+/**
+ * Hafalan rentang ayat: ayat awal & akhir bebas, tiap ayat diulang n kali, opsional rentang diulang terus.
+ * `dari` bisa diisi untuk memulai dari ayat tertentu.
+ */
+export async function hafalanRange(t, dari = 1) {
+  const n = t.quran.surat;
+  const qari = t.id.split('-')[1];
+  let s;
+  try { s = await get(`/api/quran/surat/${n}`); } catch (e) { return toast(e.message, { type: 'error' }); }
+  const max = s.jumlahAyat;
+  let pref = {};
+  try { pref = JSON.parse(localStorage.getItem('sw-hafalan') || '{}'); } catch { /* abaikan */ }
+  const st = { dari: Math.min(Math.max(1, dari), max), sampai: Math.min(max, Math.max(1, dari) + 4), ulang: [1, 3, 7, 11, 20, 40].includes(pref.ulang) ? pref.ulang : 3, loop: Boolean(pref.loop) };
+
+  const num = (val) => h('input.hf-num', { type: 'number', min: 1, max, value: val, inputmode: 'numeric', required: true });
+  const fromIn = num(st.dari); const toIn = num(st.sampai);
+  const prevFrom = h('div.hf-prev'); const prevTo = h('div.hf-prev');
+  const summary = h('p.hf-sum', { role: 'status' });
+  const ulangBox = h('div.hf-chips', { role: 'radiogroup', 'aria-label': 'Ulangi tiap ayat' });
+  const presetBox = h('div.hf-chips');
+  const loopIn = h('input', { type: 'checkbox', checked: st.loop });
+  const preview = (box, no) => {
+    const a = s.ayat.find((x) => x.nomorAyat === no);
+    box.textContent = '';
+    if (a) box.append(h('p.hf-arab', { lang: 'ar', dir: 'rtl', text: a.teksArab }), h('small', { text: `${no}. ${a.teksIndonesia}` }));
+  };
+  const clamp = (v) => Math.min(max, Math.max(1, Math.round(Number(v)) || 1));
+  const sync = (src) => {
+    st.dari = clamp(fromIn.value); st.sampai = clamp(toIn.value);
+    if (st.sampai < st.dari) { if (src === 'from') st.sampai = st.dari; else st.dari = st.sampai; }
+    fromIn.value = st.dari; toIn.value = st.sampai;
+    preview(prevFrom, st.dari); preview(prevTo, st.sampai);
+    const c = st.sampai - st.dari + 1;
+    summary.textContent = `Ayat ${st.dari}–${st.sampai} · ${c} ayat × ${st.ulang} = ${c * st.ulang} putaran${st.loop ? ' · diulang terus' : ''}`;
+    [...presetBox.children].forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.f) === st.dari && Number(b.dataset.t) === st.sampai)));
+    [...ulangBox.children].forEach((b) => b.setAttribute('aria-checked', String(Number(b.dataset.u) === st.ulang)));
+  };
+  fromIn.addEventListener('change', () => sync('from'));
+  toIn.addEventListener('change', () => sync('to'));
+  const step = (input, d, src) => h('button.icon-btn.hf-step', { type: 'button', 'aria-label': d > 0 ? 'Tambah' : 'Kurangi', onclick: () => { input.value = clamp(Number(input.value) + d); sync(src); } },
+    icon(d > 0 ? 'M12 5v14M5 12h14' : 'M5 12h14'));
+  [['Seluruh surat', 1, max], ['5 ayat pertama', 1, Math.min(5, max)], ['10 ayat pertama', 1, Math.min(10, max)], ['5 ayat terakhir', Math.max(1, max - 4), max]]
+    .filter(([, f, to], i, arr) => arr.findIndex(([, f2, t2]) => f2 === f && t2 === to) === i)
+    .forEach(([label, f, to]) => presetBox.append(h('button.chip-src', { type: 'button', text: label, dataset: { f, t: to }, onclick: () => { fromIn.value = f; toIn.value = to; sync('from'); } })));
+  [1, 3, 7, 11, 20, 40].forEach((u) => ulangBox.append(h('button.chip-src', { type: 'button', role: 'radio', text: u === 1 ? 'Sekali' : `${u}×`, dataset: { u }, onclick: () => { st.ulang = u; sync(); } })));
+  loopIn.addEventListener('change', () => { st.loop = loopIn.checked; sync(); });
+
+  const go = h('button.btn-primary', { type: 'submit' }, icon(I.play), 'Mulai hafalan');
+  const close = openOverlay(h('form.dialog.hafalan', { onsubmit: async (e) => {
+    e.preventDefault(); sync();
+    go.disabled = true;
+    try { localStorage.setItem('sw-hafalan', JSON.stringify({ ulang: st.ulang, loop: st.loop })); } catch { /* abaikan */ }
+    try {
+      const r = await get(`/api/quran/hafalan/${n}?qari=${qari}&ulang=${st.ulang}&dari=${st.dari}&sampai=${st.sampai}`);
+      playList(r.items, 0, { shuffle: false, repeat: st.loop ? 'all' : 'off', source: `Hafalan ${r.surat.namaLatin} ${r.dari}–${r.sampai}` });
+      toast(`Hafalan ${r.surat.namaLatin} ayat ${r.dari}–${r.sampai}, tiap ayat ${st.ulang}×${st.loop ? ', diulang terus' : ''}${r.terpotong ? ' (dipotong karena terlalu panjang)' : ''}`);
+      close();
+    } catch (er) { toast(er.message, { type: 'error' }); go.disabled = false; }
+  } },
+  h('h3', {}, `Hafalan · ${s.namaLatin}`, h('small.muted', { text: ` ${s.arti} · ${max} ayat` })),
+  h('div.hf-grid', {},
+    h('div.hf-field', {}, h('label', { text: 'Dari ayat' }), h('div.hf-row', {}, step(fromIn, -1, 'from'), fromIn, step(fromIn, 1, 'from')), prevFrom),
+    h('div.hf-field', {}, h('label', { text: 'Sampai ayat' }), h('div.hf-row', {}, step(toIn, -1, 'to'), toIn, step(toIn, 1, 'to')), prevTo)),
+  presetBox,
+  h('p.hf-label', { text: 'Ulangi tiap ayat' }), ulangBox,
+  h('label.hf-loop', {}, loopIn, h('span', {}, h('b', { text: 'Ulangi rentang terus-menerus' }), h('small', { text: 'Setelah ayat terakhir kembali ke ayat awal sampai dihentikan.' }))),
+  summary,
+  h('div.btn-row', {}, h('button.btn', { type: 'button', text: 'Batal', onclick: () => close() }), go)));
+  sync('from');
+  fromIn.focus();
 }
 
 async function renderQuran(view) {
@@ -483,7 +557,7 @@ async function renderQuran(view) {
             h('button.btn', { type: 'button', onclick: () => playList(p.items, null, { shuffle: true, source: 'Hapalan Quran' }) }, icon(I.shuffle), 'Acak')))),
       h('div.lib-tools', {}, h('label.qari', {}, h('span', { text: 'Qari' }), sel)),
       scope,
-      h('div.lib-tools', {}, filter),
+      h('div.lib-tools', {}, clearable(filter)),
       h('p.hint', { text: 'Tips hafalan: menu ⋮ → "Hafalan per ayat" untuk mengulang tiap ayat, dan tombol Lirik di pemutar untuk melihat teks Arab, Latin, dan terjemahan.' }),
       listBox,
       h('p.hint', { text: "Teks Al-Qur'an & terjemahan: Kemenag RI. Audio murottal: everyayah.com, melalui equran.id." }));

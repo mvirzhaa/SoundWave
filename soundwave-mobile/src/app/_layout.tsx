@@ -13,6 +13,7 @@ import { SettingsProvider, useSettings } from '../lib/settings';
 import { AnnouncementPopup } from '../components/Announcements';
 import { MiniPlayer } from '../components/MiniPlayer';
 import { C } from '../lib/theme';
+import { errText, isOnline } from '../lib/api';
 import { T } from '../lib/i18n';
 
 // Logo SoundWave tetap tampil sampai sesi & pengaturan selesai dibaca (tanpa layar kosong/berputar)
@@ -64,6 +65,7 @@ function RootStack() {
             <Stack.Screen name="surat/[n]" options={{ title: '' }} />
             <Stack.Screen name="pengumuman" options={{ title: T('Pengumuman') }} />
             <Stack.Screen name="sholat" options={{ title: T('Jadwal Sholat') }} />
+            <Stack.Screen name="hafalan" options={{ title: T('Hafalan'), presentation: 'modal' }} />
             <Stack.Screen name="tv-player" options={{ presentation: 'fullScreenModal', headerShown: false, animation: 'slide_from_bottom', orientation: 'all' }} />
           </Stack.Protected>
         </Stack>
@@ -102,7 +104,8 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
     <View style={{ flex: 1, backgroundColor: '#070b1d', alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14 }}>
       <Text style={{ color: '#e8ebff', fontSize: 20, fontWeight: '800' }}>{T('Terjadi kesalahan')}</Text>
       <Text style={{ color: '#9aa3c7', textAlign: 'center' }}>{T('Aplikasi mengalami masalah. Ketuk muat ulang untuk melanjutkan.')}</Text>
-      <Text style={{ color: '#9aa3c7', fontSize: 12, textAlign: 'center' }} numberOfLines={3}>{String(error?.message || '')}</Text>
+      {/* Detail galat tanpa link/alamat server; saat offline cukup pesan offline */}
+      <Text style={{ color: '#9aa3c7', fontSize: 12, textAlign: 'center' }} numberOfLines={3}>{isOnline() ? errText(error, '') : errText({ status: 0 })}</Text>
       <Pressable onPress={retry} style={{ backgroundColor: '#8b6dff', borderRadius: 999, paddingHorizontal: 22, paddingVertical: 12 }}>
         <Text style={{ color: '#fff', fontWeight: '800' }}>{T('Muat ulang')}</Text>
       </Pressable>

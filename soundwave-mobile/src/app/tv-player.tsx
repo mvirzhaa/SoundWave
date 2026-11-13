@@ -13,8 +13,8 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { WebView } from 'react-native-webview';
-import { getServer } from '../lib/api';
+import { SafeWebView } from '../components/SafeWebView';
+import { getServer, errText, isOnline } from '../lib/api';
 import { T } from '../lib/i18n';
 import { usePlayer } from '../lib/player';
 import { useUi } from '../lib/ui';
@@ -67,7 +67,8 @@ export default function TvPlayerScreen() {
     const { i, streams } = attempt.current;
     if (i >= streams.length) {
       try { player.pause(); } catch { /* abaikan */ }
-      setPhase({ kind: 'error', text: T('Saluran tidak merespons. Siaran mungkin sedang off-air atau dibatasi wilayah.') });
+      setPhase({ kind: 'error', text: isOnline() ? T('Saluran tidak merespons. Siaran mungkin sedang off-air atau dibatasi wilayah.')
+        : T('TV tidak bisa diputar saat offline. Sambungkan ke internet lalu coba lagi.') });
       return;
     }
     setPhase({ kind: 'loading', text: i > 0 ? T('Mencoba sumber cadangan {a}/{b}…', { a: i + 1, b: streams.length }) : T('Menyambungkan…') });
@@ -98,7 +99,7 @@ export default function TvPlayerScreen() {
         setYt(r);
         setPhase({ kind: 'loading', text: T('Memuat pemutar YouTube…') });
         timer.current = setTimeout(() => { if (my === seq.current) setPhase((p) => (p.kind === 'loading' ? { kind: 'playing' } : p)); }, 6000);
-      }).catch((e) => { if (my === seq.current) setPhase({ kind: 'error', text: e.message }); });
+      }).catch((e) => { if (my === seq.current) setPhase({ kind: 'error', text: errText(e) }); });
     } else {
       const streams = (it.streams || []).map((x) => x.u);
       if (!streams.length) { setPhase({ kind: 'error', text: T('Saluran ini tidak punya alamat siaran.') }); return; }
@@ -150,13 +151,13 @@ export default function TvPlayerScreen() {
   const retry = () => {
     if (!it) return;
     const my = ++seq.current;
-    if (it.kind === 'youtube') { setYt(null); tvApi.yt(it.id).then((r) => { if (my === seq.current) { setYt(r); setPhase({ kind: 'playing' }); } }).catch((e) => setPhase({ kind: 'error', text: e.message })); setPhase({ kind: 'loading', text: T('Mencari siaran langsung…') }); return; }
+    if (it.kind === 'youtube') { setYt(null); tvApi.yt(it.id).then((r) => { if (my === seq.current) { setYt(r); setPhase({ kind: 'playing' }); } }).catch((e) => setPhase({ kind: 'error', text: errText(e) })); setPhase({ kind: 'loading', text: T('Mencari siaran langsung…') }); return; }
     attempt.current.i = 0;
     tryStream(my);
   };
   const fav = async () => {
     if (!it) return;
-    try { const on = await toggleTvFav(it); ui.toast(on ? T('{n} ditambahkan ke favorit', { n: it.name }) : T('{n} dihapus dari favorit', { n: it.name })); } catch (e: any) { ui.toast(e.message, true); }
+    try { const on = await toggleTvFav(it); ui.toast(on ? T('{n} ditambahkan ke favorit', { n: it.name }) : T('{n} dihapus dari favorit', { n: it.name })); } catch (e: any) { ui.toast(errText(e), true); }
   };
 
   if (!it) {
@@ -175,7 +176,7 @@ export default function TvPlayerScreen() {
     <View style={[s.stage, { height: stageH, width }]}>
       {it.kind === 'youtube' ? (
         yt ? (
-          <WebView
+          <SafeWebView
             key={yt.videoId}
             source={{ uri: `${getServer()}/embed/${yt.videoId}?bridge=1` }}
             style={{ flex: 1, backgroundColor: '#000' }}

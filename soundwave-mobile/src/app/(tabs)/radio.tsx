@@ -3,7 +3,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
-import { get, post } from '../../lib/api';
+import { get, post, errText, isOnline } from '../../lib/api';
+import { useOnline } from '../../lib/net';
+import { OfflineNotice } from '../../components/OfflineNotice';
 import { usePlayer } from '../../lib/player';
 import { useUi } from '../../lib/ui';
 import { isFavRadio, loadRadioFav, stationTrack, toggleRadioFav, useRadioFav } from '../../lib/radio';
@@ -25,27 +27,30 @@ export default function RadioScreen() {
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
   const seq = useRef(0);
+  const online = useOnline();
 
   useEffect(() => { SecureStore.getItemAsync(NEGARA_KEY).then((v) => { if (v === '' || v === 'ID') setNegara(v); }).catch(() => {}); loadRadioFav(); }, []);
 
   const cari = async () => {
     const my = ++seq.current;
+    if (!isOnline()) { setLoading(false); return; } // radio butuh internet; daftar dimuat saat online kembali
     setLoading(true);
     try {
       const r = await get<{ stasiun: Station[] }>(`/api/radio?q=${encodeURIComponent(q.trim())}&negara=${negara}`, { timeout: 30000 });
       if (my === seq.current) { setList(r.stasiun); setErr(''); }
-    } catch (e: any) { if (my === seq.current) { setErr(e.message); setList([]); } }
+    } catch (e: any) { if (my === seq.current) { setErr(errText(e)); setList([]); } }
     finally { if (my === seq.current) setLoading(false); }
   };
-  useEffect(() => { const t = setTimeout(cari, q ? 400 : 0); return () => clearTimeout(t); }, [q, negara]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const t = setTimeout(cari, q ? 400 : 0); return () => clearTimeout(t); }, [q, negara, online]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const play = (st: Station, from: Station[]) => {
+    if (!isOnline()) { ui.toast(T('Radio tidak bisa diputar saat offline. Sambungkan ke internet lalu coba lagi.'), true); return; }
     player.playList(from.map(stationTrack), from.indexOf(st), { shuffle: false, repeat: 'off', source: T('Radio') });
     post(`/api/radio/klik/${st.uuid}`).catch(() => {});
   };
   const fav = async (st: Station) => {
     try { const f = await toggleRadioFav(st); ui.toast(f ? T('{s} ditambahkan ke favorit', { s: st.name }) : T('{s} dihapus dari favorit', { s: st.name })); }
-    catch (e: any) { ui.toast(e.message, true); }
+    catch (e: any) { ui.toast(errText(e), true); }
   };
   const setN = (n: 'ID' | '') => { setNegara(n); SecureStore.setItemAsync(NEGARA_KEY, n).catch(() => {}); };
 
@@ -77,7 +82,7 @@ export default function RadioScreen() {
 
   return (
     <FlatList
-      data={list || []}
+      data={online ? list || [] : []}
       keyExtractor={(x) => x.uuid}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={{ paddingBottom: 24 }}
@@ -90,6 +95,7 @@ export default function RadioScreen() {
               placeholderTextColor={C.muted} returnKeyType="search" onSubmitEditing={cari} autoCorrect={false} />
             {q ? <Pressable hitSlop={8} onPress={() => setQ('')}><Ionicons name="close-circle" size={18} color={C.muted} /></Pressable> : null}
           </View>
+          {!online ? <OfflineNotice title={T('Radio tidak bisa diputar saat offline')} /> : null}
           <View style={s.chips}>
             <Chip label="Indonesia" active={negara === 'ID'} onPress={() => setN('ID')} />
             <Chip label={T('Semua negara')} active={negara === ''} onPress={() => setN('')} />
@@ -100,7 +106,7 @@ export default function RadioScreen() {
               {favorit.map((st) => <Row key={`f-${st.uuid}`} st={st} from={favorit} />)}
             </View>
           ) : null}
-          <Text style={s.h3}>{err || head}</Text>
+          {online ? <Text style={s.h3}>{err || head}</Text> : null}
           {loading && !list ? <ActivityIndicator color={C.accent} style={{ marginTop: 20 }} /> : null}
           {list && !list.length && !err && !loading ? <Text style={s.empty}>{T('Stasiun tidak ditemukan. Coba nama lain, atau pilih “Semua negara”.')}</Text> : null}
         </View>

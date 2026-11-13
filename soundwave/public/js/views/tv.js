@@ -1,5 +1,5 @@
 /** Halaman TV: Pilihan (YouTube Live resmi & saluran admin), Indonesia, Dunia, Favorit, Link M3U pengguna. */
-import { h, icon, I, toast, debounce } from '../ui.js';
+import { h, icon, I, toast, debounce , clearable } from '../ui.js';
 import { get, put, del } from '../api.js';
 import { openTv, logoEl, playableStreams, tvRefreshFav, catName } from '../tv-player.js';
 
@@ -186,7 +186,7 @@ export function renderTv(view) {
 
   page.append(
     h('div.tv-top', {}, h('h2', { text: 'TV' }), h('a.link.tv-m3u-link', { href: '#/akun?buka=m3u', text: 'Link M3U' })),
-    h('div.search.radio-search', {}, h('div.search-box', {}, icon(['M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z', 'm20 20-3.5-3.5'], 'search-ico'), input)),
+    h('div.search.radio-search', {}, h('div.search-box', {}, icon(['M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z', 'm20 20-3.5-3.5'], 'search-ico'), clearable(input))),
     tabs, filters, head, grid, more, foot);
 
   foot.textContent = `Siaran gratis dari daftar publik iptv-org, siaran langsung resmi di YouTube, dan saluran pilihan admin. Ketersediaan bergantung pada penyiar; sebagian dibatasi wilayah atau tidak siaran 24 jam.${secure ? ' Saluran bertanda “http” hanya bisa diputar di aplikasi HP.' : ''}`;

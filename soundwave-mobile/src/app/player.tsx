@@ -1,5 +1,6 @@
 /** Pemutar penuh: sampul, posisi, kontrol, favorit, acak, ulangi, antrean. */
 import React, { useRef, useState } from 'react';
+import { errText } from '../lib/api';
 import { T } from '../lib/i18n';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -120,7 +121,7 @@ export default function PlayerScreen() {
           <Text style={s.artist} numberOfLines={1}>{t.artist}{isOffline(t.id) ? T('  ·  offline') : ''}</Text>
         </View>
         <Pressable hitSlop={10} accessibilityLabel={T("Favorit")} onPress={async () => {
-          try { const f = t.radio ? await toggleRadioFav(t.radio) : await lib.toggleFavorite(t); ui.toast(f ? T('Ditambahkan ke Favorit') : T('Dihapus dari Favorit')); } catch (e: any) { ui.toast(e.message, true); }
+          try { const f = t.radio ? await toggleRadioFav(t.radio) : await lib.toggleFavorite(t); ui.toast(f ? T('Ditambahkan ke Favorit') : T('Dihapus dari Favorit')); } catch (e: any) { ui.toast(errText(e), true); }
         }}>
           <Ionicons name={fav ? 'heart' : 'heart-outline'} size={28} color={fav ? C.accent : C.text} />
         </Pressable>

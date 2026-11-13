@@ -4,7 +4,8 @@ import { T } from '../lib/i18n';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { File, Paths } from 'expo-file-system';
-import { get } from '../lib/api';
+import { get, errText, isOnline } from '../lib/api';
+import { useOnline } from '../lib/net';
 import { usePlayer, usePlayerProgress } from '../lib/player';
 import { C, themed } from '../lib/theme';
 import type { Track } from '../lib/types';
@@ -50,15 +51,19 @@ function QuranText({ track }: { track: Track }) {
   const [data, setData] = useState<Surat | null>(suratCache.get(n) || null);
   const [err, setErr] = useState('');
   const listRef = useRef<FlatList<Ayat>>(null);
+  const online = useOnline();
   const load = () => {
     setErr('');
-    get<Surat>(`/api/quran/surat/${n}`, { timeout: 30000 }).then((r) => { suratCache.set(n, r); setData(r); }).catch((e) => setErr(e.message));
+    if (!isOnline()) { setErr(T('Teks surat tidak dapat dilihat saat offline. Audio yang sudah diunduh tetap bisa diputar.')); return; }
+    get<Surat>(`/api/quran/surat/${n}`, { timeout: 30000 }).then((r) => { suratCache.set(n, r); setData(r); })
+      .catch((e) => setErr(e?.status === 0 ? T('Teks surat tidak dapat dilihat saat offline. Audio yang sudah diunduh tetap bisa diputar.') : errText(e)));
   };
+  useEffect(() => { if (online && err && !data) load(); }, [online]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const c = suratCache.get(n); if (c) setData(c); else { setData(null); load(); } }, [n]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (data && active > 0) setTimeout(() => listRef.current?.scrollToIndex({ index: active - 1, viewPosition: 0.2, animated: true }), 250);
   }, [data, active]);
-  if (err) return <Center icon="cloud-offline-outline" text={err} onRetry={load} />;
+  if (err) return <Center icon="cloud-offline-outline" text={err} onRetry={online ? load : undefined} />;
   if (!data) return <View style={s.center}><ActivityIndicator color={C.accent} /><Text style={s.muted}>{T('Memuat teks surat…')}</Text></View>;
   return (
     <View style={{ flex: 1 }}>
@@ -92,9 +97,12 @@ function SongLyrics({ track }: { track: Track }) {
   const userScrollAt = useRef(0);
   const reqSeq = useRef(0);
 
+  const online = useOnline();
+  const OFF = T('Lirik tidak dapat dilihat saat offline. Lagu tetap bisa diputar; lirik muncul lagi saat terhubung ke internet.');
   const load = async (refresh = false) => {
     const seq = ++reqSeq.current;
     setData(null); setErr('');
+    if (!isOnline()) { setErr(OFF); return; }
     const dur = prog.duration > 0 ? prog.duration : track.duration;
     const q = new URLSearchParams({ title: track.title, artist: track.artist || '' });
     if (track.album) q.set('album', track.album);
@@ -105,9 +113,11 @@ function SongLyrics({ track }: { track: Track }) {
       const r = await get<LyricsData>(`/api/lyrics?${q}`, { timeout: 90000 });
       if (seq === reqSeq.current) setData(r);
     } catch (e: any) {
-      if (seq === reqSeq.current) setErr(e.message);
+      if (seq === reqSeq.current) setErr(e?.status === 0 ? OFF : errText(e));
     }
   };
+  // Kembali online → coba muat lirik lagi
+  useEffect(() => { if (online && err === OFF) load(); }, [online]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Muat ulang saat lagu berganti; tunggu sebentar agar durasi asli file terbaca
   useEffect(() => {
@@ -131,7 +141,7 @@ function SongLyrics({ track }: { track: Track }) {
 
   const nudge = (dv: number) => { const v = offset + dv; setOffset(v); saveOffset(track.id, v); userScrollAt.current = 0; };
 
-  if (err) return <Center icon="cloud-offline-outline" text={err} onRetry={() => load(true)} />;
+  if (err) return <Center icon="cloud-offline-outline" text={err} onRetry={err === OFF ? undefined : () => load(true)} />;
   if (!data) return <View style={s.center}><ActivityIndicator color={C.accent} /><Text style={s.muted}>{T('Mencari lirik…')}</Text></View>;
   if (!data.found) return <Center icon="document-text-outline" text={T("Lirik belum tersedia untuk lagu ini.")} sub={track.ytId ? T('Dicari di LRCLIB dan subtitle YouTube.') : T('Dicari di LRCLIB.')} onRetry={() => load(true)} />;
   if (data.instrumental) return <Center icon="musical-notes-outline" text={T("♪ Lagu instrumental ♪")} />;

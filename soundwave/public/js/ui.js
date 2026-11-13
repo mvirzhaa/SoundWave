@@ -225,3 +225,23 @@ export function fillBars(el, n = 19) {
     el.append(b);
   }
 }
+
+/**
+ * Bungkus kolom pencarian dengan tombol ✕ untuk menghapus seluruh teks sekaligus
+ * (tombol bawaan browser tidak muncul di semua HP/browser).
+ */
+export function clearable(input) {
+  const btn = h('button.filter-clear', { type: 'button', 'aria-label': 'Hapus pencarian', title: 'Hapus pencarian', hidden: !input.value },
+    icon('M6 6l12 12M18 6 6 18'));
+  const sync = () => { btn.hidden = !input.value; };
+  input.addEventListener('input', sync);
+  btn.addEventListener('click', () => {
+    input.value = '';
+    sync();
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+  });
+  const wrap = h('span.filter-wrap', {}, input, btn);
+  wrap.sync = sync;
+  return wrap;
+}

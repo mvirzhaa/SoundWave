@@ -4,7 +4,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth';
-import { getServer, loadSession } from '../lib/api';
+import { getServer, loadSession, errText } from '../lib/api';
 import { Button } from '../components/Common';
 import { C, themed } from '../lib/theme';
 
@@ -30,7 +30,7 @@ export default function Login() {
       if (mode === 'login') await login(server, email.trim(), password);
       else await register(server, name.trim(), email.trim(), password);
     } catch (e: any) {
-      setErr(e.message);
+      setErr(errText(e));
       if (e.status === 0) setShowServer(true);
     } finally {
       setBusy(false);

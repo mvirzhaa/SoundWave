@@ -34,7 +34,9 @@ export async function api(path, { method = 'GET', body, signal, timeout = DEFAUL
   try { res = await fetch(apiUrl(path), opts); } catch (e) {
     if (e.name === 'TimeoutError' && !signal) throw new ApiError('Server terlalu lama menjawab. Periksa koneksi lalu coba lagi.', 0, 'TIMEOUT');
     if (e.name === 'AbortError' || e.name === 'TimeoutError') throw e;
-    throw new ApiError('Tidak dapat terhubung ke server.', 0);
+    throw new ApiError(navigator.onLine === false
+      ? 'Sedang offline — periksa koneksi internet Anda.'
+      : 'Tidak dapat terhubung ke server SoundWave. Coba lagi sebentar.', 0, 'OFFLINE');
   }
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && data.code === 'UNAUTHENTICATED') listeners.forEach((fn) => fn());

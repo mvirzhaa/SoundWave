@@ -168,3 +168,15 @@ src/
 - **v13**: penanda playlist di Pustaka — lingkaran kecil berisi inisial playlist yang sudah memuat lagu itu
   (maks. 3, sisanya "+N"), diperbarui otomatis saat lagu ditambah/dihapus dari playlist. Hanya perubahan JS
   (bila APK v12 dengan expo-video sudah dipasang, cukup build ulang seperti biasa).
+- **v14 — offline & hafalan**:
+  - Tombol **Unduh semua untuk offline** di setiap playlist & Hapalan Quran (satu ketukan; ada kemajuan, tombol
+    Batal, tetap berjalan walau layar ditutup, berhenti sendiri bila koneksi putus).
+  - Daftar playlist, isi playlist, dan playlist Quran disimpan di HP → tetap bisa dibuka & diputar (lagu yang sudah
+    diunduh) saat offline; lagu yang belum diunduh ditandai "belum diunduh — butuh internet".
+  - Status koneksi bersama (`lib/api.ts` + `lib/net.ts`): saat server tak terjangkau aplikasi mengecek `/api/ping`
+    tiap 10 detik dan pulih sendiri. Radio, TV, Cari, lirik, dan teks surat memberi info "tidak bisa saat offline".
+  - Pesan galat tidak pernah lagi menampilkan alamat server/link (termasuk WebView YouTube & layar "Terjadi kesalahan").
+  - **Hafalan rentang ayat**: menu ⋮ surat → Ulangi / hafalan → *Pilih rentang ayat*, atau tekan lama ayat di layar
+    baca surat → pilih ayat awal–akhir, ulangi tiap ayat (sekali–40×), opsional ulangi rentang terus.
+  - Tombol ✕ untuk menghapus teks di kolom cari Pustaka & daftar surat.
+  Hanya perubahan JS (APK dengan expo-video dari v12 cukup di-build ulang seperti biasa).

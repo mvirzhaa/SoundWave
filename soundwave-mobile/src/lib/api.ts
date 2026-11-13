@@ -3,6 +3,8 @@
  * Token sesi disimpan di SecureStore; dikirim sebagai "Authorization: Bearer".
  */
 import * as SecureStore from 'expo-secure-store';
+import { AppState } from 'react-native';
+import { T } from './i18n';
 
 const KEY_SERVER = 'sw_server';
 const KEY_TOKEN = 'sw_token';
@@ -19,6 +21,42 @@ export class ApiError extends Error {
   code?: string;
   constructor(message: string, status: number, code?: string) { super(message); this.status = status; this.code = code; }
 }
+
+/* ---------- Status koneksi ----------
+ * "Offline" = server SoundWave tidak terjangkau (tanpa internet, atau server mati). Ditentukan dari hasil
+ * permintaan API; selama offline aplikasi mengecek /api/ping tiap 10 detik dan saat kembali ke layar. */
+let online = true;
+const netSubs = new Set<(v: boolean) => void>();
+let probe: ReturnType<typeof setInterval> | null = null;
+export const isOnline = () => online;
+export function subscribeOnline(fn: (v: boolean) => void) { netSubs.add(fn); return () => { netSubs.delete(fn); }; }
+export function markOnline(v: boolean) {
+  if (v === online) return;
+  online = v;
+  netSubs.forEach((f) => f(v));
+  if (!v && !probe) probe = setInterval(ping, 10000);
+  if (v && probe) { clearInterval(probe); probe = null; }
+}
+export async function ping() {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 6000);
+  try {
+    const r = await fetch(`${server}/api/ping`, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
+    markOnline(r.ok);
+  } catch { markOnline(false); } finally { clearTimeout(timer); }
+  return online;
+}
+AppState.addEventListener('change', (st) => { if (st === 'active' && !online) ping(); });
+
+/** Pesan galat yang aman ditampilkan: tanpa alamat server/link (mis. saat offline). */
+export function errText(e: any, fallback = 'Terjadi kesalahan. Coba lagi.') {
+  if (e?.status === 0 || /network request failed|failed to fetch|aborted|timeout|unable to resolve host|ECONN|ENOTFOUND|UnknownHost|SocketTimeout/i.test(String(e?.message || ''))) {
+    return T(OFFLINE_MSG);
+  }
+  const m = String(e?.message || e || '').replace(/(https?|file|content):\/\/\S+/gi, '').replace(/\s{2,}/g, ' ').replace(/[:\s]+$/, '').trim();
+  return m || T(fallback);
+}
+export const OFFLINE_MSG = 'Sedang offline — tidak dapat terhubung ke server SoundWave. Periksa koneksi internet.';
 
 export const setUnauthorizedHandler = (fn: () => void) => { onUnauthorized = fn; };
 export const getServer = () => server;
@@ -61,10 +99,13 @@ export async function api<T = any>(path: string, opts: Opts = {}): Promise<T> {
     });
   } catch (e: any) {
     if (opts.signal?.aborted) throw e;
-    throw new ApiError(`Tidak dapat terhubung ke server ${server}. Periksa koneksi & alamat server.`, 0);
+    markOnline(false);
+    // Jangan tampilkan alamat server/link di pesan galat
+    throw new ApiError(T(OFFLINE_MSG), 0, 'OFFLINE');
   } finally {
     clearTimeout(timer);
   }
+  markOnline(true);
   const data: any = await res.json().catch(() => ({}));
   // Sesi berakhir atau akun dinonaktifkan admin → keluar
   if (res.status === 401 && (data.code === 'UNAUTHENTICATED' || data.code === 'ACCOUNT_DISABLED')) onUnauthorized?.();

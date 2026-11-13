@@ -1,5 +1,5 @@
 /** Halaman Cari: pencarian YouTube, pratinjau, konversi MP3/MP4, unduh / simpan ke Drive. */
-import { h, icon, I, fmtDur, fmtSize, debounce, fillBars, toast } from '../ui.js';
+import { h, icon, I, fmtDur, fmtSize, debounce, fillBars, toast, clearable } from '../ui.js';
 import { get, post, api, apiUrl } from '../api.js';
 import { store, emit, on, driveReady, driveWritable, invalidateTracks } from '../store.js';
 
@@ -26,7 +26,7 @@ export function renderSearch(view, params) {
   fillBars(bars);
 
   const form = h('form.search', { role: 'search', autocomplete: 'off' },
-    h('div.search-box', {}, icon(['M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z', 'm20 20-3.5-3.5'], 'search-ico'), input, submit), list);
+    h('div.search-box', {}, icon(['M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z', 'm20 20-3.5-3.5'], 'search-ico'), clearable(input), submit), list);
 
   view.append(
     h('section.hero', {},

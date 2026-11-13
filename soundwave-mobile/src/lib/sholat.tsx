@@ -16,7 +16,7 @@ import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { AudioPlayer, createAudioPlayer } from 'expo-audio';
 import { File, Paths } from 'expo-file-system';
-import { get, getServer, mediaToken, put } from './api';
+import { get, getServer, mediaToken, put, errText } from './api';
 import { useAuth } from './auth';
 import { useLibrary } from './library';
 import { usePlayer } from './player';
@@ -214,7 +214,7 @@ export function SholatProvider({ children }: { children: React.ReactNode }) {
       if (!p) p = readCache().prefs || null;
       if (p) setPrefs(p);
     }
-    try { applyJadwal(await fetchJadwal(p)); } catch (e: any) { setError(e.message); }
+    try { applyJadwal(await fetchJadwal(p)); } catch (e: any) { setError(errText(e)); }
     setLoading(false);
   }, [fetchJadwal]);
 
@@ -225,7 +225,7 @@ export function SholatProvider({ children }: { children: React.ReactNode }) {
       const s = patch.sholat;
       if (s && ('kota' in s || 'mode' in s || 'koordinat' in s)) applyJadwal(await fetchJadwal(p).catch(() => jadwalRef.current));
       return p;
-    } catch (e: any) { setError(e.message); throw e; }
+    } catch (e: any) { setError(errText(e)); throw e; }
   }, [fetchJadwal]);
 
   /* ---- Lokasi real time ---- */
@@ -265,7 +265,7 @@ export function SholatProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (e: any) {
-      setLocError(e.message || T('Gagal membaca lokasi.'));
+      setLocError(errText(e) || T('Gagal membaca lokasi.'));
     } finally { setLocating(false); }
   }, [savePrefs, fetchJadwal]);
 

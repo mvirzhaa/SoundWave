@@ -153,3 +153,7 @@ const chip = document.getElementById('nextChip');
 const updateChip = () => { const t = nextChipText(); chip.hidden = !t; chip.textContent = t; };
 onEvent('sholat:tick', updateChip);
 onEvent('sholat', updateChip);
+
+/* Koneksi terputus / kembali: beri tahu fitur apa saja yang butuh internet */
+window.addEventListener('offline', () => toast('Sedang offline — radio, TV, lirik, pencarian, dan lagu dari Drive tidak bisa dimuat.', { type: 'error' }));
+window.addEventListener('online', () => toast('Kembali online.'));

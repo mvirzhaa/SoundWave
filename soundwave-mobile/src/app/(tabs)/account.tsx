@@ -4,7 +4,7 @@ import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } fro
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { del, getServer, post, put } from '../../lib/api';
+import { del, getServer, post, put, errText } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { usePlayer } from '../../lib/player';
 import { useUi } from '../../lib/ui';
@@ -36,7 +36,7 @@ export default function AccountScreen() {
 
   const run = async (key: string, fn: () => Promise<void>) => {
     setBusy(key);
-    try { await fn(); } catch (e: any) { ui.toast(e.message, true); } finally { setBusy(''); }
+    try { await fn(); } catch (e: any) { ui.toast(errText(e), true); } finally { setBusy(''); }
   };
 
   // Tema/bahasa berganti → layar dipasang ulang; kembali ke tab Akun sesudahnya
@@ -55,7 +55,7 @@ export default function AccountScreen() {
         <View style={{ flex: 1 }}>
           <Text style={s.name}>{user.name}</Text>
           <Text style={s.muted}>{user.email}</Text>
-          <Text style={[s.muted, { fontSize: 12 }]} numberOfLines={1}>{T('Server')}: {getServer()}</Text>
+          <Text style={[s.muted, { fontSize: 12 }]} numberOfLines={1}>{T('Server')}: {getServer().replace(/^https?:\/\//, '').replace(/\/.*$/, '')}</Text>
         </View>
       </View>
 
@@ -185,7 +185,7 @@ function LinkPane({ d, busy, run, setUser, ui }: DriveCtx) {
         onPress={() => run('link', async () => {
           setErr('');
           try { const r = await put<{ user: User }>('/api/drive/link', { folder }); setUser(r.user); ui.toast(T('Folder terbaca: {f}', { f: r.user.drive.folderName || '' })); }
-          catch (e: any) { setErr(e.message); }
+          catch (e: any) { setErr(errText(e)); }
         })} />
       {active ? <Text style={[s.link, { color: C.danger }]} onPress={() => run('unlink', async () => { const r = await del<{ user: User }>('/api/drive/link'); setUser(r.user); })}>{T('Lepas folder')}</Text> : null}
     </>
@@ -231,7 +231,7 @@ function OauthPane({ d, busy, run, setUser, refreshUser, ui }: DriveCtx) {
         onPress={() => run('folder', async () => {
           setErr('');
           try { const r = await put<{ user: User }>('/api/drive/folder', { folder }); setUser(r.user); ui.toast(T('Folder diatur: {f}', { f: r.user.drive.folderName || '' })); }
-          catch (e: any) { setErr(e.message); }
+          catch (e: any) { setErr(errText(e)); }
         })} />
       <Button label={T('Buat folder “SoundWave” baru')} kind="ghost" loading={busy === 'create'}
         onPress={() => run('create', async () => { const r = await post<{ user: User }>('/api/drive/folder', { name: 'SoundWave' }); setUser(r.user); ui.toast(T('Folder “SoundWave” dibuat')); })} />

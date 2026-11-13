@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import { clearCache } from './cache';
 import { get, loadSession, post, setServer, setToken, setUnauthorizedHandler, hasToken } from './api';
 import type { User } from './types';
 
@@ -68,6 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await finish(await post<AuthResponse>('/api/auth/register', { name, email, password }));
   };
   const logout = async (all = false) => {
+    clearCache(); // salinan data offline milik akun ini
     try { if (all) await post('/api/auth/logout-all'); } catch { /* abaikan */ }
     await setToken(null);
     setUserState(null);

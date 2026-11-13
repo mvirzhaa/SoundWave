@@ -5,7 +5,7 @@ import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pre
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { get } from '../lib/api';
+import { get, errText } from '../lib/api';
 import { Kota, useSholat } from '../lib/sholat';
 import { useUi } from '../lib/ui';
 import { Button, Chip } from '../components/Common';
@@ -22,7 +22,7 @@ export default function SholatScreen() {
   const adz = p?.adzan;
   const auto = p?.mode === 'auto';
 
-  const save = (patch: any) => S.savePrefs(patch).catch((e) => ui.toast(e.message, true));
+  const save = (patch: any) => S.savePrefs(patch).catch((e) => ui.toast(errText(e), true));
   const setWaktu = (k: Wajib) => save({ sholat: { adzan: { waktu: { [k]: !adz?.waktu[k] } } } });
   const vol = Math.round((adz?.volume ?? 0.9) * 10) / 10;
 
@@ -128,7 +128,7 @@ export default function SholatScreen() {
       </ScrollView>
       <RegionPicker visible={picker} onClose={() => setPicker(false)} onPick={async (k) => {
         setPicker(false);
-        try { await S.setManual(k); ui.toast(T('Wilayah: {w}', { w: titleCase(k.lokasi) })); } catch (e: any) { ui.toast(e.message, true); }
+        try { await S.setManual(k); ui.toast(T('Wilayah: {w}', { w: titleCase(k.lokasi) })); } catch (e: any) { ui.toast(errText(e), true); }
       }} />
     </>
   );
@@ -176,7 +176,7 @@ function RegionPicker({ visible, onClose, onPick }: { visible: boolean; onClose:
     const t = setTimeout(() => {
       get<{ kota: Kota[] }>(`/api/sholat/kota?q=${encodeURIComponent(q.trim())}`)
         .then((r) => { if (my === seq.current) { setList(r.kota); setErr(r.kota.length ? '' : T('Wilayah tidak ditemukan.')); } })
-        .catch((e) => my === seq.current && setErr(e.message));
+        .catch((e) => my === seq.current && setErr(errText(e)));
     }, 220);
     return () => clearTimeout(t);
   }, [q, visible]);

@@ -1,4 +1,5 @@
 /** Host UI global: menu aksi (bottom sheet), dialog input, konfirmasi, dan toast. */
+import { getServer } from './api';
 import React, { createContext, useContext, useRef, useState } from 'react';
 import { T } from './i18n';
 import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -35,6 +36,9 @@ export function UiProvider({ children }: { children: React.ReactNode }) {
     prompt: (o) => new Promise((resolve) => { setPromptVal(o.value || ''); setPrompt({ ...o, resolve }); }),
     confirm: (o) => new Promise((resolve) => setConfirm({ ...o, resolve })),
     toast: (msg, error) => {
+      // Pengaman: jangan pernah tampilkan link server / link berisi token di notifikasi
+      const srv = getServer();
+      msg = String(msg).split(srv).join('').replace(/(https?|file|content):\/\/\S*(\/api\/|[?&]t=)\S*/gi, '').replace(/\s{2,}/g, ' ').trim();
       setToast({ msg, error });
       if (toastTimer.current) clearTimeout(toastTimer.current);
       Animated.timing(toastAnim, { toValue: 1, duration: 180, useNativeDriver: true }).start();

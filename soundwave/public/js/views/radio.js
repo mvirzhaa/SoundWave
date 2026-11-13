@@ -1,5 +1,5 @@
 /** Halaman Radio: cari stasiun / frekuensi, stasiun populer Indonesia, favorit. */
-import { h, icon, I, toast, fillCover, debounce } from '../ui.js';
+import { h, icon, I, toast, fillCover, debounce , clearable } from '../ui.js';
 import { get, post } from '../api.js';
 import { on } from '../store.js';
 import { playList, current } from '../player.js';
@@ -51,6 +51,7 @@ export function renderRadio(view) {
 
   function play(st, list) {
     const tracks = list.map(stationTrack);
+    if (navigator.onLine === false) { toast('Radio tidak bisa diputar saat offline. Sambungkan ke internet lalu coba lagi.', { type: 'error' }); return; }
     playList(tracks, list.indexOf(st), { shuffle: false, repeat: 'off', source: 'Radio' });
     post(`/api/radio/klik/${st.uuid}`).catch(() => {});
   }
@@ -82,7 +83,7 @@ export function renderRadio(view) {
 
   page.append(
     h('h2', { text: 'Radio' }),
-    h('div.search.radio-search', {}, h('div.search-box', {}, icon(['M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z', 'm20 20-3.5-3.5'], 'search-ico'), input)),
+    h('div.search.radio-search', {}, h('div.search-box', {}, icon(['M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z', 'm20 20-3.5-3.5'], 'search-ico'), clearable(input))),
     negaraSeg,
     favBox,
     head,
