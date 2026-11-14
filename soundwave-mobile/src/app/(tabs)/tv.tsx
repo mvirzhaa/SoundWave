@@ -36,6 +36,19 @@ export default function TvScreen() {
   const [meta, setMeta] = useState<TvMeta | null>(mem.meta);
   const [links, setLinks] = useState<M3uLink[]>([]);
   const [picker, setPicker] = useState<null | 'negara' | 'kategori' | 'm3u'>(null);
+  // Daftar negara & kategori: dimuat ulang bila gagal (mis. server masih menyiapkan daftar TV / sedang offline)
+  const [metaState, setMetaState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const metaBusy = useRef(false);
+  const loadMeta = useCallback(() => {
+    if (mem.meta || metaBusy.current) return;
+    metaBusy.current = true;
+    setMetaState('loading');
+    tvApi.meta().then((m) => { mem.meta = m; setMeta(m); setMetaState('idle'); })
+      .catch(() => setMetaState('error')).finally(() => { metaBusy.current = false; });
+  }, []);
+  // Filter untuk tab Pilihan & Favorit (disaring di HP; tidak disimpan)
+  const [lf, setLf] = useState({ negara: '', kategori: '' });
+  const [srcAll, setSrcAll] = useState<TvItem[]>([]);
   const seq = useRef(0);
   const [ready, setReady] = useState(false);
 
@@ -47,10 +60,10 @@ export default function TvScreen() {
     SecureStore.getItemAsync(UI_KEY).then((v) => {
       if (v) { try { setSt((s) => ({ ...s, ...JSON.parse(v) })); } catch { /* abaikan */ } }
     }).catch(() => {}).finally(() => setReady(true));
-    if (!mem.meta) tvApi.meta().then((m) => { mem.meta = m; setMeta(m); }).catch(() => {});
+    loadMeta();
     loadTvFav();
-  }, []);
-  useFocusEffect(useCallback(() => { tvApi.m3uLinks().then(setLinks).catch(() => {}); }, []));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useFocusEffect(useCallback(() => { tvApi.m3uLinks().then(setLinks).catch(() => {}); loadMeta(); }, [loadMeta]));
   const update = (patch: Partial<UiState>) => setSt((s) => {
     const n = { ...s, ...patch };
     SecureStore.setItemAsync(UI_KEY, JSON.stringify(n)).catch(() => {});
@@ -66,12 +79,15 @@ export default function TvScreen() {
       return tvApi.m3uChannels(st.m3u, q, offset);
     }
     const src = st.tab === 'pilihan' ? (mem.pilihan = mem.pilihan || await tvApi.pilihan()) : await loadTvFav(true);
+    setSrcAll(src);
     const f = q.trim().toLowerCase();
-    const list = f ? src.filter((x) => x.name.toLowerCase().includes(f)) : src;
+    const list = src.filter((x) => (!f || x.name.toLowerCase().includes(f))
+      && (!lf.negara || x.country === lf.negara) && (!lf.kategori || (x.cats || []).includes(lf.kategori)));
     return { total: list.length, offset: 0, items: list };
   };
 
   const online = useOnline();
+  useEffect(() => { if (online) loadMeta(); }, [online, loadMeta]);
   const load = useCallback(async (reset: boolean) => {
     if (!ready) return;
     if (!isOnline()) { setLoading(false); setMore(false); return; } // TV butuh internet
@@ -90,7 +106,7 @@ export default function TvScreen() {
     } finally {
       if (my === seq.current) { setLoading(false); setMore(false); }
     }
-  }, [ready, st, q, items.length, total, more, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready, st, q, lf, items.length, total, more, loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ganti tab/filter → muat ulang; ketik cari → tunggu 400 ms
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -98,7 +114,7 @@ export default function TvScreen() {
     if (debounce.current) clearTimeout(debounce.current);
     debounce.current = setTimeout(() => load(true), q ? 400 : 0);
     return () => { if (debounce.current) clearTimeout(debounce.current); };
-  }, [ready, st.tab, st.negara, st.kategori, st.m3u, q, online]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready, st.tab, st.negara, st.kategori, st.m3u, q, online, lf]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (links.length && !links.some((l) => l.id === st.m3u)) update({ m3u: links[0].id });
@@ -122,6 +138,30 @@ export default function TvScreen() {
   const favSet = useMemo(() => new Set(favs.map((f) => f.id)), [favs]);
   const linkName = links.find((l) => l.id === st.m3u)?.name;
   const countryName = (code: string) => meta?.countries.find((c) => c.code === code)?.name || code;
+  const flagOf = (code: string) => meta?.countries.find((c) => c.code === code)?.flag || '';
+  const local = st.tab === 'pilihan' || st.tab === 'favorit';
+  const curNegara = local ? lf.negara : st.negara;
+  const curKategori = local ? lf.kategori : st.kategori;
+  /** Pilihan negara & kategori untuk pemilih. Tab Pilihan/Favorit: hanya yang ada di daftarnya. */
+  const negaraOpts = (() => {
+    const all = meta?.countries || [];
+    if (local) {
+      const cnt: Record<string, number> = {};
+      srcAll.forEach((x) => { if (x.country) cnt[x.country] = (cnt[x.country] || 0) + 1; });
+      return [{ value: '', label: T('Semua negara'), sub: String(srcAll.length) },
+        ...Object.keys(cnt).sort((a, b) => countryName(a).localeCompare(countryName(b))).map((c) => ({ value: c, label: `${flagOf(c)} ${countryName(c)}`.trim(), sub: String(cnt[c]) }))];
+    }
+    return [{ value: '', label: T('Semua negara'), sub: meta ? String(meta.total) : '' }, ...all.map((c) => ({ value: c.code, label: `${c.flag} ${c.name}`, sub: String(c.count) }))];
+  })();
+  const kategoriOpts = (() => {
+    if (local) {
+      const cnt: Record<string, number> = {};
+      srcAll.forEach((x) => (x.cats || []).forEach((k) => { cnt[k] = (cnt[k] || 0) + 1; }));
+      return [{ value: '', label: T('Semua kategori'), sub: '' }, ...Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]).map((k) => ({ value: k, label: catName(k), sub: String(cnt[k]) }))];
+    }
+    return [{ value: '', label: T('Semua kategori'), sub: '' }, ...(meta?.categories || []).map((c) => ({ value: c.id, label: catName(c.id), sub: st.tab === 'dunia' ? String(c.count) : '' }))];
+  })();
+  const metaMissing = !local && !meta;
 
   /* ---------- Bagian atas ---------- */
   const header = (
@@ -135,40 +175,41 @@ export default function TvScreen() {
       {!online ? <View style={{ marginTop: 12 }}><OfflineNotice title={T('TV tidak bisa diputar saat offline')} /></View> : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabs} keyboardShouldPersistTaps="handled">
         {TABS.filter(([k]) => k !== 'm3u' || links.length).map(([k, label]) => (
-          <Pressable key={k} onPress={() => update({ tab: k, ...(k === 'id' || k === 'dunia' ? {} : { kategori: '' }) })}
+          <Pressable key={k} onPress={() => { if (k !== st.tab) { setLf({ negara: '', kategori: '' }); update({ tab: k }); } }}
             style={[s.tab, st.tab === k && s.tabOn]} accessibilityRole="tab" accessibilityState={{ selected: st.tab === k }}>
             <Text style={[s.tabText, st.tab === k && { color: C.accent }]}>{T(label)}</Text>
           </Pressable>
         ))}
       </ScrollView>
-      {st.tab === 'id' || st.tab === 'dunia' || (st.tab === 'm3u' && links.length > 1) ? (
+      {/* Filter negara & kategori — tersedia di semua tab kecuali Link saya (yang punya pemilih link) */}
+      {st.tab !== 'm3u' ? (
         <View style={s.filters}>
-          {st.tab === 'dunia' ? (
-            <Pressable style={s.filter} onPress={() => setPicker('negara')}>
-              <Ionicons name="globe-outline" size={16} color={C.accent} />
-              <Text style={s.filterText} numberOfLines={1}>{st.negara ? `${meta?.countries.find((c) => c.code === st.negara)?.flag || ''} ${countryName(st.negara)}` : T('Semua negara')}</Text>
-              <Ionicons name="chevron-down" size={16} color={C.muted} />
-            </Pressable>
-          ) : null}
-          {st.tab !== 'm3u' ? (
-            <Pressable style={s.filter} onPress={() => setPicker('kategori')}>
-              <Ionicons name="pricetag-outline" size={16} color={C.accent} />
-              <Text style={s.filterText} numberOfLines={1}>{st.kategori ? catName(st.kategori) : T('Semua kategori')}</Text>
-              <Ionicons name="chevron-down" size={16} color={C.muted} />
-            </Pressable>
-          ) : (
-            <Pressable style={s.filter} onPress={() => setPicker('m3u')}>
-              <Ionicons name="link-outline" size={16} color={C.accent} />
-              <Text style={s.filterText} numberOfLines={1}>{linkName || T('Pilih link')}</Text>
-              <Ionicons name="chevron-down" size={16} color={C.muted} />
-            </Pressable>
-          )}
+          <Pressable style={s.filter} onPress={() => { loadMeta(); setPicker('negara'); }} accessibilityRole="button" accessibilityLabel={T('Pilih negara')}>
+            <Ionicons name="globe-outline" size={16} color={C.accent} />
+            <Text style={s.filterText} numberOfLines={1}>
+              {st.tab === 'id' ? `${flagOf('ID')} Indonesia`.trim() : curNegara ? `${flagOf(curNegara)} ${countryName(curNegara)}`.trim() : T('Semua negara')}
+            </Text>
+            <Ionicons name="chevron-down" size={16} color={C.muted} />
+          </Pressable>
+          <Pressable style={s.filter} onPress={() => { loadMeta(); setPicker('kategori'); }} accessibilityRole="button" accessibilityLabel={T('Pilih kategori')}>
+            <Ionicons name="pricetag-outline" size={16} color={C.accent} />
+            <Text style={s.filterText} numberOfLines={1}>{curKategori ? catName(curKategori) : T('Semua kategori')}</Text>
+            <Ionicons name="chevron-down" size={16} color={C.muted} />
+          </Pressable>
+        </View>
+      ) : links.length > 1 ? (
+        <View style={s.filters}>
+          <Pressable style={s.filter} onPress={() => setPicker('m3u')}>
+            <Ionicons name="link-outline" size={16} color={C.accent} />
+            <Text style={s.filterText} numberOfLines={1}>{linkName || T('Pilih link')}</Text>
+            <Ionicons name="chevron-down" size={16} color={C.muted} />
+          </Pressable>
         </View>
       ) : null}
       {!loading && !err && items.length ? (
         <Text style={s.count}>
           {({ pilihan: T('Siaran resmi & pilihan admin'), id: 'Indonesia', dunia: st.negara ? countryName(st.negara) : T('Seluruh dunia'), favorit: T('Favorit'), m3u: linkName || T('Link saya') } as Record<Tab, string>)[st.tab]}
-          {st.kategori && (st.tab === 'id' || st.tab === 'dunia') ? ` · ${catName(st.kategori)}` : ''} · {T('{n} saluran', { n: total })}
+          {local && curNegara ? ` · ${countryName(curNegara)}` : ''}{curKategori && st.tab !== 'm3u' ? ` · ${catName(curKategori)}` : ''} · {T('{n} saluran', { n: total })}
         </Text>
       ) : null}
     </View>
@@ -233,18 +274,20 @@ export default function TvScreen() {
       <Picker
         visible={picker != null}
         title={picker === 'negara' ? T('Pilih negara') : picker === 'kategori' ? T('Pilih kategori') : T('Pilih link')}
-        options={picker === 'negara'
-          ? [{ value: '', label: T('Semua negara'), sub: meta ? String(meta.total) : '' }, ...(meta?.countries || []).map((c) => ({ value: c.code, label: `${c.flag} ${c.name}`, sub: String(c.count) }))]
-          : picker === 'kategori'
-            ? [{ value: '', label: T('Semua kategori'), sub: '' }, ...(meta?.categories || []).map((c) => ({ value: c.id, label: catName(c.id), sub: st.tab === 'dunia' ? String(c.count) : '' }))]
-            : links.map((l) => ({ value: String(l.id), label: l.name, sub: '' }))}
-        value={picker === 'negara' ? st.negara : picker === 'kategori' ? st.kategori : String(st.m3u)}
+        options={picker === 'negara' ? negaraOpts : picker === 'kategori' ? kategoriOpts : links.map((l) => ({ value: String(l.id), label: l.name, sub: '' }))}
+        value={picker === 'negara' ? (st.tab === 'id' ? 'ID' : curNegara) : picker === 'kategori' ? curKategori : String(st.m3u)}
         searchable={picker === 'negara'}
+        status={picker !== 'm3u' && metaMissing ? (metaState === 'error' ? 'error' : 'loading') : undefined}
+        onRetry={loadMeta}
         onClose={() => setPicker(null)}
         onPick={(v) => {
-          if (picker === 'negara') update({ negara: v });
-          else if (picker === 'kategori') update({ kategori: v });
-          else update({ m3u: Number(v) });
+          if (picker === 'negara') {
+            if (local) setLf((f) => ({ ...f, negara: v }));
+            else if (st.tab === 'id') { if (v !== 'ID') update({ tab: 'dunia', negara: v }); } // negara lain → tab Dunia
+            else update(v === 'ID' ? { tab: 'id' } : { negara: v });
+          } else if (picker === 'kategori') {
+            if (local) setLf((f) => ({ ...f, kategori: v })); else update({ kategori: v });
+          } else update({ m3u: Number(v) });
           setPicker(null);
         }}
       />
@@ -281,9 +324,9 @@ const Card = React.memo(function Card({ item, width, fav, onPress, onFav, showCo
 });
 
 /* ---------- Pemilih (negara / kategori / link) dengan pencarian ---------- */
-function Picker({ visible, title, options, value, searchable, onClose, onPick }: {
+function Picker({ visible, title, options, value, searchable, status, onRetry, onClose, onPick }: {
   visible: boolean; title: string; options: { value: string; label: string; sub: string }[]; value: string;
-  searchable?: boolean; onClose: () => void; onPick: (v: string) => void;
+  searchable?: boolean; status?: 'loading' | 'error'; onRetry?: () => void; onClose: () => void; onPick: (v: string) => void;
 }) {
   const insets = useSafeAreaInsets();
   const [f, setF] = useState('');
@@ -299,6 +342,15 @@ function Picker({ visible, title, options, value, searchable, onClose, onPick }:
           <View style={[s.search, { marginHorizontal: 8, marginTop: 4 }]}>
             <Ionicons name="search" size={16} color={C.muted} />
             <TextInput value={f} onChangeText={setF} placeholder={T('Cari…')} placeholderTextColor={C.muted} style={s.input} autoCorrect={false} />
+          </View>
+        ) : null}
+        {status ? (
+          <View style={s.pickStatus}>
+            {status === 'loading' ? <ActivityIndicator color={C.accent} /> : <Ionicons name="cloud-offline-outline" size={20} color={C.warn} />}
+            <Text style={[s.muted, { flex: 1, textAlign: 'left' }]}>
+              {status === 'loading' ? T('Memuat daftar negara & kategori…') : T('Daftar negara & kategori belum bisa dimuat (server masih menyiapkan daftar TV atau koneksi terputus).')}
+            </Text>
+            {status === 'error' && onRetry ? <Pressable onPress={onRetry} style={s.retrySm}><Text style={s.retryText}>{T('Coba lagi')}</Text></Pressable> : null}
           </View>
         ) : null}
         <FlatList
@@ -350,6 +402,8 @@ const s = themed(() => StyleSheet.create({
   sheet: { backgroundColor: C.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 8, paddingTop: 8, borderWidth: 1, borderColor: C.border },
   grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: C.border, marginBottom: 8 },
   sheetTitle: { color: C.text, fontWeight: '800', fontSize: 17, paddingHorizontal: 12, paddingVertical: 6 },
+  pickStatus: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 12, marginVertical: 8, padding: 12, borderRadius: 12, backgroundColor: C.bg },
+  retrySm: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: C.accent },
   opt: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 13, borderRadius: 12 },
   optText: { flex: 1, color: C.text, fontSize: 15 },
 }));

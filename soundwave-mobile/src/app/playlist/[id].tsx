@@ -8,6 +8,7 @@ import { del, patch, put, errText } from '../../lib/api';
 import { getCached } from '../../lib/cache';
 import { useOnline } from '../../lib/net';
 import { DownloadAll } from '../../components/DownloadAll';
+import { useScrollJump } from '../../components/ScrollJump';
 import { useLibrary } from '../../lib/library';
 import { usePlayer } from '../../lib/player';
 import { useUi } from '../../lib/ui';
@@ -114,6 +115,7 @@ export default function PlaylistScreen() {
   useEffect(() => { if (online && stale) load(); }, [online]); // eslint-disable-line react-hooks/exhaustive-deps
   useFocusEffect(useCallback(() => { load(); }, [load, lib.playlistsVersion]));
 
+  const jump = useScrollJump<Track>(p?.items.length || 0, { ref: listRef });
   if (err) return <Text style={{ color: C.danger, padding: 24 }}>{err}</Text>;
   if (!p) return <ActivityIndicator color={C.accent} style={{ marginTop: 40 }} />;
 
@@ -168,7 +170,8 @@ export default function PlaylistScreen() {
         data={p.items}
         keyExtractor={(t) => String(t.itemId)}
         scrollEnabled={!drag}
-        onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }}
+        onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; jump.onScroll(e); }}
+        onContentSizeChange={jump.onContentSizeChange}
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: 24 }}
         ListHeaderComponent={
@@ -218,6 +221,7 @@ export default function PlaylistScreen() {
             onPress={() => {}} onMore={() => {}} />
         </Animated.View>
       ) : null}
+      {drag ? null : jump.node}
       </View>
     </>
   );

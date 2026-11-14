@@ -899,3 +899,18 @@ body.tv-open { overflow: hidden; }
 .hf-sum { margin: 0; font-weight: 600; }
 .dialog.hafalan { max-height: calc(100dvh - 48px); overflow-y: auto; overscroll-behavior: contain; }
 @media (max-width: 720px) { .dialog.hafalan { max-height: calc(100dvh - var(--nav-h) - 40px - env(safe-area-inset-bottom)); } .dialog.hafalan .btn-row { position: sticky; bottom: -1px; background: var(--surface); padding: 10px 0 2px; } }
+.tv-meta-msg { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--muted); }
+
+/* Lompat ke lagu paling atas / bawah */
+.jump { position: fixed; right: max(18px, calc((100vw - 1100px) / 2)); bottom: calc(var(--mini-h) + 32px); z-index: 40; display: grid; gap: 10px; }
+.jump[hidden], .jump-btn[hidden] { display: none; }
+.jump-btn {
+  width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border); box-shadow: var(--shadow);
+  transition: transform .12s, border-color .12s;
+}
+.jump-btn:hover { border-color: var(--accent); color: var(--accent); }
+.jump-btn:active { transform: scale(.94); }
+.jump-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+body.has-selbar .jump { bottom: calc(var(--mini-h) + 40px); }
+@media (max-width: 720px) { .jump { right: 14px; bottom: calc(var(--nav-h) + var(--mini-h) + 28px + env(safe-area-inset-bottom)); } }

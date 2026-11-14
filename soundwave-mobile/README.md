@@ -180,3 +180,9 @@ src/
     baca surat → pilih ayat awal–akhir, ulangi tiap ayat (sekali–40×), opsional ulangi rentang terus.
   - Tombol ✕ untuk menghapus teks di kolom cari Pustaka & daftar surat.
   Hanya perubahan JS (APK dengan expo-video dari v12 cukup di-build ulang seperti biasa).
+- **v15**: tombol bulat **↑ / ↓** di kanan bawah daftar lagu Pustaka, isi playlist, Hapalan Quran, dan halaman
+  artis/album — langsung lompat ke lagu paling atas / paling bawah (hanya muncul bila daftar cukup panjang; ↑ muncul
+  setelah digulir, ↓ hilang saat sudah di ujung). **TV**: pilihan **Negara** & **Kategori** kini ada di semua tab
+  (Pilihan, Indonesia, Dunia, Favorit); di Pilihan/Favorit menyaring daftar itu sendiri lengkap dengan jumlah.
+  Daftar negara/kategori dimuat ulang otomatis bila sempat gagal (saat kembali online, saat tab dibuka, atau
+  tombol "Coba lagi"). Hanya perubahan JS.

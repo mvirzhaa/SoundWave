@@ -191,6 +191,11 @@ YouTube, link dari admin, dan link M3U yang ditambahkan pengguna sendiri (tanggu
 - **Tampilan playlist**: Kartu atau Daftar (tombol di kanan atas tab Playlist; diingat di perangkat).
 - **Maju/mundur 10 detik**: tombol di pojok sampul pemutar layar penuh; di desktop juga tombol ← / →.
 - Saran pencarian tertutup otomatis setelah pencarian dijalankan.
+- **Lompat atas/bawah**: tombol ↑ / ↓ di kanan bawah daftar lagu Pustaka, isi playlist, Hapalan Quran, dan
+  halaman artis/album (muncul untuk daftar ≥ 12 lagu yang perlu digulir).
+- **Filter TV**: Negara & Kategori tersedia di semua tab TV kecuali "Link saya"; di Pilihan/Favorit menyaring
+  daftar itu sendiri. Bila `/api/tv/meta` sempat gagal (mis. daftar sedang disiapkan), muncul tombol "Coba lagi"
+  dan dicoba ulang otomatis.
 
 ## Ganti nama & urutan Pustaka
 

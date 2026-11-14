@@ -18,6 +18,18 @@ export function renderTv(view) {
   const save = () => { try { localStorage.setItem(UI_KEY, JSON.stringify({ tab: st.tab, negara: st.negara, kategori: st.kategori, m3u: st.m3u })); } catch { /* abaikan */ } };
 
   let items = []; let total = 0; let loading = false; let seq = 0; let done = false;
+  // Filter tab Pilihan & Favorit (disaring di browser)
+  let lf = { negara: '', kategori: '' };
+  let srcAll = [];
+  let metaBusy = false;
+  /** Daftar negara & kategori; dimuat ulang bila sebelumnya gagal (server masih menyiapkan / offline). */
+  async function loadMeta() {
+    if (cache.meta || metaBusy) return;
+    metaBusy = true; drawFilters();
+    try { cache.meta = await get('/api/tv/meta', timeout()); } catch { /* coba lagi lewat tombol */ }
+    metaBusy = false;
+    if (alive) drawFilters();
+  }
   let alive = true;
 
   const input = h('input', { type: 'search', placeholder: 'Cari saluran TV…', 'aria-label': 'Cari saluran TV', inputmode: 'search', enterkeyhint: 'search' });
@@ -82,8 +94,11 @@ export function renderTv(view) {
     if (st.tab === 'pilihan') cache.pilihan = cache.pilihan || (await get('/api/tv/pilihan', timeout())).items;
     if (st.tab === 'favorit') cache.fav = (await get('/api/tv/favorit', timeout())).items;
     const src = st.tab === 'pilihan' ? cache.pilihan : cache.fav;
+    srcAll = src;
     const f = q().toLowerCase();
-    const list = f ? src.filter((x) => x.name.toLowerCase().includes(f)) : src;
+    const list = src.filter((x) => (!f || x.name.toLowerCase().includes(f))
+      && (!lf.negara || x.country === lf.negara) && (!lf.kategori || (x.cats || []).includes(lf.kategori)));
+    if (alive) drawFilters(); // pilihan negara/kategori mengikuti isi daftar
     return { total: list.length, offset: 0, items: list };
   }
 
@@ -134,7 +149,9 @@ export function renderTv(view) {
       return;
     }
     const where = { pilihan: 'Siaran resmi & pilihan admin', id: 'Indonesia', dunia: st.negara ? countryName(st.negara) : 'Seluruh dunia', favorit: 'Favorit', m3u: (cache.m3u || []).find((l) => l.id === st.m3u)?.name || 'Link saya' }[st.tab];
-    head.textContent = `${where}${st.kategori && ['id', 'dunia'].includes(st.tab) ? ` · ${catName(st.kategori)}` : ''}${term ? ` · “${term}”` : ''} · ${total} saluran`;
+    const local = st.tab === 'pilihan' || st.tab === 'favorit';
+    const kat = local ? lf.kategori : ['id', 'dunia'].includes(st.tab) ? st.kategori : '';
+    head.textContent = `${where}${local && lf.negara ? ` · ${countryName(lf.negara)}` : ''}${kat ? ` · ${catName(kat)}` : ''}${term ? ` · “${term}”` : ''} · ${total} saluran`;
   }
 
   const countryName = (code) => cache.meta?.countries.find((c) => c.code === code)?.name || code;
@@ -146,7 +163,7 @@ export function renderTv(view) {
       if (k === 'm3u' && !cache.m3u?.length) continue;
       tabs.append(h('button.chip-src', {
         type: 'button', role: 'tab', 'aria-selected': String(st.tab === k), 'aria-checked': String(st.tab === k), text: label,
-        onclick: () => { if (st.tab === k) return; st.tab = k; if (k !== 'dunia' && k !== 'id') st.kategori = ''; save(); drawTabs(); drawFilters(); load(true); },
+        onclick: () => { if (st.tab === k) return; st.tab = k; lf = { negara: '', kategori: '' }; save(); drawTabs(); drawFilters(); load(true); },
       }));
     }
   }
@@ -158,21 +175,44 @@ export function renderTv(view) {
     return h('label.tv-sel', {}, h('span', { text: label }), s);
   }
 
+  /** Negara & kategori tersedia di semua tab (kecuali Link saya, yang punya pemilih link). */
   function drawFilters() {
     filters.textContent = '';
     const m = cache.meta;
-    if (st.tab === 'id' || st.tab === 'dunia') {
-      if (st.tab === 'dunia') {
-        filters.append(select('Negara', st.negara, [['', `Semua negara${m ? ` (${m.total})` : ''}`], ...(m?.countries || []).map((c) => [c.code, `${c.flag} ${c.name} (${c.count})`])],
-          (v) => { st.negara = v; save(); load(true); }));
-      }
-      filters.append(select('Kategori', st.kategori, [['', 'Semua kategori'], ...(m?.categories || []).map((c) => [c.id, `${catName(c.id)}${st.tab === 'dunia' ? ` (${c.count})` : ''}`])],
-        (v) => { st.kategori = v; save(); load(true); }));
+    if (st.tab === 'm3u') {
+      if (cache.m3u?.length > 1) filters.append(select('Link', String(st.m3u), cache.m3u.map((l) => [String(l.id), l.name]), (v) => { st.m3u = Number(v); save(); load(true); }));
+      filters.hidden = !filters.childElementCount;
+      return;
     }
-    if (st.tab === 'm3u' && cache.m3u?.length > 1) {
-      filters.append(select('Link', String(st.m3u), cache.m3u.map((l) => [String(l.id), l.name]), (v) => { st.m3u = Number(v); save(); load(true); }));
+    const local = st.tab === 'pilihan' || st.tab === 'favorit';
+    let negOpts; let katOpts;
+    if (local) {
+      const nc = {}; const kc = {};
+      srcAll.forEach((x) => { if (x.country) nc[x.country] = (nc[x.country] || 0) + 1; (x.cats || []).forEach((k) => { kc[k] = (kc[k] || 0) + 1; }); });
+      const flag = (c) => m?.countries.find((x) => x.code === c)?.flag || '';
+      negOpts = [['', `Semua negara (${srcAll.length})`], ...Object.keys(nc).sort((a, b) => countryName(a).localeCompare(countryName(b))).map((c) => [c, `${flag(c)} ${countryName(c)} (${nc[c]})`.trim()])];
+      katOpts = [['', 'Semua kategori'], ...Object.keys(kc).sort((a, b) => kc[b] - kc[a]).map((k) => [k, `${catName(k)} (${kc[k]})`])];
+    } else {
+      negOpts = [['', `Semua negara${m ? ` (${m.total})` : ''}`], ...(m?.countries || []).map((c) => [c.code, `${c.flag} ${c.name} (${c.count})`])];
+      katOpts = [['', 'Semua kategori'], ...(m?.categories || []).map((c) => [c.id, `${catName(c.id)}${st.tab === 'dunia' ? ` (${c.count})` : ''}`])];
     }
-    filters.hidden = !filters.childElementCount;
+    const negVal = local ? lf.negara : st.tab === 'id' ? 'ID' : st.negara;
+    if (st.tab === 'id' && !negOpts.some(([v]) => v === 'ID')) negOpts.push(['ID', '🇮🇩 Indonesia']);
+    filters.append(
+      select('Negara', negVal, negOpts, (v) => {
+        if (local) lf.negara = v;
+        else if (st.tab === 'id') { if (v === 'ID') return; st.tab = 'dunia'; st.negara = v; drawTabs(); } // negara lain → tab Dunia
+        else if (v === 'ID') { st.tab = 'id'; drawTabs(); }
+        else st.negara = v;
+        save(); drawFilters(); load(true);
+      }),
+      select('Kategori', local ? lf.kategori : st.kategori, katOpts, (v) => { if (local) lf.kategori = v; else st.kategori = v; save(); load(true); }));
+    // Daftar negara/kategori belum termuat → info + tombol coba lagi
+    if (!local && !m) {
+      filters.append(h('p.tv-meta-msg', {}, metaBusy ? 'Memuat daftar negara & kategori…' : 'Daftar negara & kategori belum bisa dimuat. ',
+        metaBusy ? null : h('button.link', { type: 'button', text: 'Coba lagi', onclick: loadMeta })));
+    }
+    filters.hidden = false;
   }
 
   /* ---------- Gulir tak berujung (60 saluran per halaman) ---------- */
@@ -199,7 +239,7 @@ export function renderTv(view) {
       cache.fav ? Promise.resolve(cache.fav) : get('/api/tv/favorit', timeout()).then((r) => r.items),
     ]);
     if (!alive) return;
-    if (meta.status === 'fulfilled') cache.meta = meta.value;
+    if (meta.status === 'fulfilled') cache.meta = meta.value; else setTimeout(loadMeta, 5000);
     if (m3u.status === 'fulfilled') cache.m3u = m3u.value;
     if (fav.status === 'fulfilled') cache.fav = fav.value;
     if (st.tab === 'm3u' && !cache.m3u?.length) { st.tab = 'pilihan'; save(); load(true); }
@@ -212,5 +252,7 @@ export function renderTv(view) {
   init();
   load(true);
 
-  return () => { alive = false; io.disconnect(); ++seq; };
+  const onOnline = () => loadMeta();
+  window.addEventListener('online', onOnline);
+  return () => { alive = false; io.disconnect(); ++seq; window.removeEventListener('online', onOnline); };
 }

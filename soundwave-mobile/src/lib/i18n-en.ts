@@ -538,4 +538,8 @@ export const EN: Record<string, string> = {
   "{n} lagu tersimpan, {f} gagal (coba lagi nanti).": "{n} songs saved, {f} failed (try again later).",
   "Sedang offline — tidak dapat terhubung ke server SoundWave. Periksa koneksi internet.": "Offline — can't reach the SoundWave server. Check your internet connection.",
   "Terjadi kesalahan. Coba lagi.": "Something went wrong. Please try again.",
+  "Ke lagu paling atas": "Jump to first song",
+  "Ke lagu paling bawah": "Jump to last song",
+  "Memuat daftar negara & kategori…": "Loading countries & categories…",
+  "Daftar negara & kategori belum bisa dimuat (server masih menyiapkan daftar TV atau koneksi terputus).": "Countries & categories couldn't load yet (the server is still preparing the TV list, or you're offline).",
 };

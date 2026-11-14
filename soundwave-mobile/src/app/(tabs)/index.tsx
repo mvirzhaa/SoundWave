@@ -15,6 +15,7 @@ import { useLibrary } from '../../lib/library';
 import { usePlayer } from '../../lib/player';
 import { useUi } from '../../lib/ui';
 import { downloadOffline, isOffline, offlineTracks, removeOffline } from '../../lib/offline';
+import { useScrollJump } from '../../components/ScrollJump';
 import { TrackRow } from '../../components/TrackRow';
 import { useTrackMenu } from '../../components/TrackMenu';
 import { Collage, Cover } from '../../components/Cover';
@@ -114,6 +115,8 @@ export default function LibraryScreen() {
     return out;
   }, [base, filter, sort]);
 
+  // Tombol lompat ke lagu paling atas / bawah (di atas tombol acak)
+  const jump = useScrollJump<Track>(list.length, { bottom: 88 });
   const sortMenu = () => ui.sheet({
     title: T('Urutkan lagu'),
     items: SORTS.map(([k, label, icon]) => ({ label: `${T(label)}${sort === k ? '  ✓' : ''}`, icon, onPress: () => setSort(k) })),
@@ -383,6 +386,10 @@ export default function LibraryScreen() {
     <View style={{ flex: 1 }}>
       {selBar}
       <FlatList
+        ref={jump.ref}
+        onScroll={jump.onScroll}
+        onContentSizeChange={jump.onContentSizeChange}
+        scrollEventThrottle={64}
         data={list}
         keyExtractor={(t) => t.id}
         refreshControl={refresh}
@@ -415,6 +422,7 @@ export default function LibraryScreen() {
           <Ionicons name="shuffle" size={26} color="#fff" />
         </Pressable>
       ) : null}
+      {sel ? null : jump.node}
     </View>
   );
 }

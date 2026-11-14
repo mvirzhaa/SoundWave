@@ -16,6 +16,46 @@ const saveUi = () => { try { localStorage.setItem('sw-lib-ui', JSON.stringify({ 
 const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
 const byTitle = (a, b) => a.title.localeCompare(b.title, 'id');
 
+/* ================= Lompat ke lagu paling atas / bawah ================= */
+
+let jumpUi = null;
+/** Tombol ↑/↓ melayang untuk daftar lagu panjang. "Atas" tampil setelah digulir, "Bawah" selama belum di ujung. */
+function addJump(box) {
+  jumpUi?.destroy();
+  const rows = () => box.querySelectorAll('.track');
+  if (rows().length < 12) return;
+  const go = (row) => row?.scrollIntoView({ behavior: rows().length > 300 ? 'auto' : 'smooth', block: 'center' });
+  const up = h('button.jump-btn', { type: 'button', 'aria-label': 'Ke lagu paling atas', title: 'Ke lagu paling atas', onclick: () => go(rows()[0]) }, icon('M12 19V5M5 12l7-7 7 7'));
+  const down = h('button.jump-btn', { type: 'button', 'aria-label': 'Ke lagu paling bawah', title: 'Ke lagu paling bawah', onclick: () => { const r = rows(); go(r[r.length - 1]); } }, icon('M12 5v14M5 12l7 7 7-7'));
+  const el = h('div.jump', { role: 'group', 'aria-label': 'Navigasi daftar lagu' }, up, down);
+  document.body.append(el);
+  let raf = 0;
+  const update = () => {
+    raf = 0;
+    if (!box.isConnected) return destroy();
+    const r = rows();
+    if (!r.length) { el.hidden = true; return; }
+    const first = r[0].getBoundingClientRect();
+    const last = r[r.length - 1].getBoundingClientRect();
+    up.hidden = first.top > -40;                         // lagu pertama masih terlihat
+    down.hidden = last.bottom < window.innerHeight + 40; // lagu terakhir sudah terlihat
+    el.hidden = up.hidden && down.hidden;
+  };
+  const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  const mo = new MutationObserver(onScroll);
+  mo.observe(box, { childList: true });
+  function destroy() {
+    window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll);
+    mo.disconnect(); el.remove();
+    if (jumpUi?.el === el) jumpUi = null;
+  }
+  jumpUi = { el, destroy };
+  update();
+}
+window.addEventListener('hashchange', () => jumpUi?.destroy());
+
 /* ================= Penanda playlist ================= */
 
 /** Lagu mana sudah masuk playlist mana (untuk lingkaran inisial di Pustaka). */
@@ -336,6 +376,7 @@ export async function renderLibrary(view, params) {
       else list.sort((a, b) => addedAt(b) - addedAt(a));
       const box = trackList(list, { source: ui.source === 'lokal' ? 'Folder lokal' : 'Semua lagu', onChange: draw, showSource: mixed });
       enableSelect(box, list);
+      requestAnimationFrame(() => addJump(box));
       body.append(h('p.count', {}, `${list.length} lagu`, h('span.hint-inline', { text: ' · tekan lama untuk memilih beberapa' })), box);
     } else {
       const key = ui.tab === 'artis' ? 'artist' : 'genre';
@@ -536,7 +577,9 @@ async function renderQuran(view) {
       const f = norm(filter.value);
       const items = f ? p.items.filter((x) => norm(`${x.title} ${x.quran.arti} ${x.quran.surat}`).includes(f)) : p.items;
       listBox.textContent = '';
-      listBox.append(trackList(items, { source: 'Hapalan Quran', playlist: p, onChange: () => load({ qari: p.qari, semua: p.semua }) }));
+      const qbox = trackList(items, { source: 'Hapalan Quran', playlist: p, onChange: () => load({ qari: p.qari, semua: p.semua }) });
+      listBox.append(qbox);
+      requestAnimationFrame(() => addJump(qbox));
       listBox.querySelectorAll('.track').forEach((row, i) => {
         const it = items[i];
         row.querySelector('.track-text small').textContent = `${it.quran.arti} · ${it.quran.jumlahAyat} ayat · ${it.quran.tempatTurun}`;
@@ -617,6 +660,7 @@ export async function renderPlaylist(view, id) {
         : h('p.hint', { text: 'Sebagian lagu lokal tidak ditemukan di folder yang sedang dibuka di browser ini (mungkin disimpan dari perangkat lain).' }));
     }
     const list = trackList(p.items, { source: p.name, playlist: p, onChange: reload, draggable: !p.special, showSource: true });
+    requestAnimationFrame(() => addJump(list));
     if (!p.special) enableDrag(list, p, reload);
     page.append(list);
   };
@@ -810,6 +854,6 @@ export async function renderGroup(view, kind, name) {
           h('button.btn-primary', { type: 'button', onclick: () => playList(list, 0, { shuffle: false, source: name }) }, icon(I.play), 'Putar'),
           h('button.btn', { type: 'button', onclick: () => playList(list, null, { shuffle: true, source: name }) }, icon(I.shuffle), 'Acak'),
           h('button.btn', { type: 'button', onclick: () => addToPlaylistMenu(list) }, icon(I.plus), 'Ke playlist')))),
-    list.length ? (() => { const box = trackList(list, { source: name, showSource: true, onChange: () => { view.textContent = ''; renderGroup(view, kind, name); } }); enableSelect(box, list); return box; })() : h('p.state', { text: 'Tidak ada lagu.' }),
+    list.length ? (() => { const box = trackList(list, { source: name, showSource: true, onChange: () => { view.textContent = ''; renderGroup(view, kind, name); } }); enableSelect(box, list); requestAnimationFrame(() => addJump(box)); return box; })() : h('p.state', { text: 'Tidak ada lagu.' }),
   );
 }

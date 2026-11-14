@@ -7,6 +7,8 @@ import { useLibrary } from '../../../lib/library';
 import { usePlayer } from '../../../lib/player';
 import { TrackRow } from '../../../components/TrackRow';
 import { useTrackMenu } from '../../../components/TrackMenu';
+import type { Track } from '../../../lib/types';
+import { useScrollJump } from '../../../components/ScrollJump';
 import { Collage } from '../../../components/Cover';
 import { Button } from '../../../components/Common';
 import { C, themed } from '../../../lib/theme';
@@ -22,10 +24,16 @@ export default function GroupScreen() {
     .filter((t) => (isArtist ? t.artist || 'Tidak diketahui' : t.genre || 'Tanpa genre') === name)
     .sort((a, b) => a.title.localeCompare(b.title, 'id')), [lib.tracks, lib.localTracks, name, isArtist]);
 
+  const jump = useScrollJump<Track>(list.length);
+
   return (
-    <>
+    <View style={{ flex: 1 }}>
       <Stack.Screen options={{ title: '' }} />
       <FlatList
+        ref={jump.ref}
+        onScroll={jump.onScroll}
+        onContentSizeChange={jump.onContentSizeChange}
+        scrollEventThrottle={64}
         data={list}
         keyExtractor={(t) => t.id}
         contentContainerStyle={{ paddingBottom: 24 }}
@@ -49,7 +57,8 @@ export default function GroupScreen() {
         )}
         extraData={player.current?.id}
       />
-    </>
+      {jump.node}
+    </View>
   );
 }
 

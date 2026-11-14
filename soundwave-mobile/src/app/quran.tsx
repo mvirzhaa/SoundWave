@@ -9,6 +9,7 @@ import { getCached } from '../lib/cache';
 import { useOnline } from '../lib/net';
 import { isOffline } from '../lib/offline';
 import { DownloadAll } from '../components/DownloadAll';
+import { useScrollJump } from '../components/ScrollJump';
 import { usePlayer } from '../lib/player';
 import { useSholat } from '../lib/sholat';
 import { useUi } from '../lib/ui';
@@ -51,6 +52,7 @@ export default function QuranScreen() {
     return f ? all.filter((t) => norm(`${t.title} ${t.quran?.arti} ${t.quran?.surat}`).includes(f)) : all;
   }, [p, filter, online, lib.offlineVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const jump = useScrollJump<Track>(items.length);
   if (err) return <Text style={{ color: C.danger, padding: 24 }}>{err}</Text>;
   if (!p) return <ActivityIndicator color={C.accent} style={{ marginTop: 40 }} />;
   const qariName = p.qariList.find((x) => x.id === p.qari)?.name || '';
@@ -65,7 +67,12 @@ export default function QuranScreen() {
   const setScope = (semua: boolean) => { savePrefs({ quran: { semua } }).catch(() => {}); load({ qari: p.qari, semua }); };
 
   return (
+    <View style={{ flex: 1 }}>
     <FlatList
+      ref={jump.ref}
+      onScroll={jump.onScroll}
+      onContentSizeChange={jump.onContentSizeChange}
+      scrollEventThrottle={64}
       data={items}
       keyExtractor={(t) => t.id}
       contentContainerStyle={{ paddingBottom: 24 }}
@@ -117,6 +124,8 @@ export default function QuranScreen() {
       ListFooterComponent={<Text style={[s.hint, { padding: 16 }]}>{T('Teks Al-Qur\'an & terjemahan: Kemenag RI. Audio murottal melalui equran.id.')}</Text>}
       extraData={player.current?.id}
     />
+    {jump.node}
+    </View>
   );
 }
 
