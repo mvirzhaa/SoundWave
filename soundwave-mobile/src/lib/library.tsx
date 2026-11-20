@@ -1,6 +1,8 @@
 /** Cache pustaka Google Drive + favorit + penanda perubahan playlist. */
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { del, get, patch, post, put, errText } from './api';
+import { Image } from 'expo-image';
+import { del, get, patch, post, put, errText, subscribeOnline, ytThumb } from './api';
+import { getCached, readCache, writeCache } from './cache';
 import { useAuth } from './auth';
 import { loadOffline, offlineTracks, subscribeOffline, updateOfflineMeta } from './offline';
 import { clearMembership, refreshMembership } from './membership';
@@ -101,9 +103,19 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       setFavorites((prev) => new Set([...r.tracks.filter((t) => t.favorite).map((t) => t.id), ...[...prev].filter((id) => id.startsWith('local-'))]));
       setError(null);
       setUsingOffline(false);
+      // Salinan data lagu (favorit, genre, judul) untuk dipakai saat offline; sampul lagu yang diunduh ikut disimpan
+      writeCache('library-meta', Object.fromEntries(r.tracks.map((t) => [t.id, { favorite: Boolean(t.favorite), genre: t.genre ?? null, title: t.title, artist: t.artist, name: t.name }])));
+      const thumbs = offlineTracks().map((t) => ytThumb(t.ytId)).filter(Boolean) as string[];
+      if (thumbs.length) Image.prefetch(thumbs, 'disk').catch(() => {});
     } catch (e: any) {
       const off = offlineTracks();
-      if (off.length && e.status === 0) { setTracks(off); setUsingOffline(true); setError(null); }
+      if (off.length && e.status === 0) {
+        // Pakai data terakhir dari server (favorit, genre, penamaan) agar tampilan offline tetap lengkap
+        const meta = readCache<Record<string, Partial<Track>>>('library-meta') || {};
+        setTracks(off.map((t) => { const m = meta[t.id]; return m ? { ...t, favorite: m.favorite, genre: m.genre ?? t.genre, title: m.title || t.title, artist: m.artist ?? t.artist, name: m.name || t.name } : t; }));
+        setFavorites((prev) => new Set([...prev, ...Object.entries(meta).filter(([, m]) => m.favorite).map(([id]) => id)]));
+        setUsingOffline(true); setError(null);
+      }
       else setError(errText(e));
     } finally {
       setLoading(false);
@@ -112,13 +124,15 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
 
   // Penanda playlist: muat saat pengguna masuk, kosongkan saat keluar
   useEffect(() => { if (user) refreshMembership(); else clearMembership(); }, [user?.id]);
+  // Kembali online → perbarui penanda playlist dari server
+  useEffect(() => (user ? subscribeOnline((v) => { if (v) refreshMembership(); }) : undefined), [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setTracks(null); if (user) load(); }, [user?.id, user?.drive.folderId, user?.drive.connected, user?.drive.mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Favorit lagu lokal (ID-nya disimpan server, file tetap di HP)
   useEffect(() => {
     if (!user) return;
-    get<{ items: Track[] }>('/api/library/playlists/favorites')
-      .then((p) => setFavorites((prev) => new Set([...prev, ...p.items.filter((x) => x.id.startsWith('local-')).map((x) => x.id)])))
+    getCached<{ items: Track[] }>('favorites-local', '/api/library/playlists/favorites')
+      .then(({ data: p }) => setFavorites((prev) => new Set([...prev, ...p.items.filter((x) => x.id.startsWith('local-')).map((x) => x.id)])))
       .catch(() => {});
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 

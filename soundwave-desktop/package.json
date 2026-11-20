@@ -1,0 +1,43 @@
+{
+  "name": "soundwave-desktop",
+  "productName": "SoundWave",
+  "version": "1.0.0",
+  "description": "SoundWave untuk Windows — pemutar musik, radio, TV, Quran, dan unduhan MP3/MP4 dengan fitur yang sama seperti versi web.",
+  "main": "main.js",
+  "author": "UIKA Bogor",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check main.js && node --check preload.js && node --check src/setup.js && node --check src/offline.js",
+    "dist": "electron-builder --win",
+    "dist:dir": "electron-builder --win --dir"
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "id.ac.uika.soundwave.desktop",
+    "productName": "SoundWave",
+    "copyright": "SoundWave",
+    "directories": { "buildResources": "build", "output": "dist" },
+    "files": ["main.js", "preload.js", "defaults.json", "src/**/*", "assets/**/*", "package.json"],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [{ "target": "nsis", "arch": ["x64"] }, { "target": "portable", "arch": ["x64"] }]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SoundWave",
+      "installerLanguages": ["id_ID"],
+      "language": "1057",
+      "artifactName": "SoundWave-Setup-${version}.${ext}"
+    },
+    "portable": { "artifactName": "SoundWave-Portable-${version}.${ext}" }
+  }
+}

@@ -12,6 +12,7 @@ import { SholatProvider } from '../lib/sholat';
 import { SettingsProvider, useSettings } from '../lib/settings';
 import { AnnouncementPopup } from '../components/Announcements';
 import { MiniPlayer } from '../components/MiniPlayer';
+import { WidgetSync } from '../widget/WidgetSync';
 import { C } from '../lib/theme';
 import { errText, isOnline } from '../lib/api';
 import { T } from '../lib/i18n';
@@ -63,6 +64,7 @@ function RootStack() {
             <Stack.Screen name="drive" options={{ headerShown: false }} />
             <Stack.Screen name="quran" options={{ title: T('Hapalan Quran') }} />
             <Stack.Screen name="surat/[n]" options={{ title: '' }} />
+            <Stack.Screen name="widget" options={{ headerShown: false, animation: 'none' }} />
             <Stack.Screen name="pengumuman" options={{ title: T('Pengumuman') }} />
             <Stack.Screen name="sholat" options={{ title: T('Jadwal Sholat') }} />
             <Stack.Screen name="hafalan" options={{ title: T('Hafalan'), presentation: 'modal' }} />
@@ -73,6 +75,7 @@ function RootStack() {
       </View>
       {user ? <AnnouncementPopup /> : null}
       <PlayerNotices />
+      <WidgetSync />
     </Fragment>
   );
 }

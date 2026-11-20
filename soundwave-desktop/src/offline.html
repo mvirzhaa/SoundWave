@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; script-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SoundWave — Tidak terhubung</title>
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body>
+  <main class="card">
+    <img class="logo" src="../assets/icon.png" alt="">
+    <h1>Server tidak terjangkau</h1>
+    <p>SoundWave di Windows membutuhkan koneksi ke server. Periksa internet/jaringan Anda atau pastikan server menyala. Aplikasi mencoba lagi otomatis.</p>
+    <div class="hint center">Server: <code id="srv"></code></div>
+    <div class="status" id="st"></div>
+    <div class="row">
+      <button type="button" id="change">Ganti alamat server</button>
+      <button type="button" class="primary" id="retry">Coba lagi</button>
+    </div>
+  </main>
+  <script src="offline.js"></script>
+</body>
+</html>

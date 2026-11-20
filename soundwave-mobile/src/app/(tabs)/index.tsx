@@ -2,11 +2,11 @@
  * Tab Pustaka. Sumber: Semua / Google Drive / HP (penyimpanan lokal).
  * Tab: Lagu / Playlist / Artis / Genre. Mode offline (unduhan Drive), acak semua.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { T } from '../../lib/i18n';
 import { ActivityIndicator, BackHandler, FlatList, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { get, post, errText } from '../../lib/api';
 import { getCached } from '../../lib/cache';
@@ -48,6 +48,15 @@ export default function LibraryScreen() {
   const [tab, setTab] = useState<Tab>('lagu');
   const [src, setSrc] = useState<Source>('semua');
   const [filter, setFilter] = useState('');
+  // Dari widget layar utama ("Cari…"): buka tab Lagu dan langsung fokus ke kolom cari
+  const { cari } = useLocalSearchParams<{ cari?: string }>();
+  const filterRef = useRef<React.ComponentRef<typeof TextInput>>(null);
+  useEffect(() => {
+    if (!cari) return;
+    setTab('lagu');
+    const h = setTimeout(() => filterRef.current?.focus(), 400);
+    return () => clearTimeout(h);
+  }, [cari]);
   const [offlineOnly, setOfflineOnly] = useState(false);
   const [sort, setSortState] = useState<Sort>('baru');
   useEffect(() => { SecureStore.getItemAsync(SORT_KEY).then((v) => { if (v && SORTS.some(([k]) => k === v)) setSortState(v as Sort); }).catch(() => {}); }, []);
@@ -228,7 +237,7 @@ export default function LibraryScreen() {
       <View style={s.tools}>
         <View style={s.filter}>
           <Ionicons name="search" size={16} color={C.muted} />
-          <TextInput value={filter} onChangeText={setFilter} placeholder={tab === 'playlist' ? T('Cari playlist…') : T('Cari judul, artis, album…')}
+          <TextInput ref={filterRef} value={filter} onChangeText={setFilter} placeholder={tab === 'playlist' ? T('Cari playlist…') : T('Cari judul, artis, album…')}
             placeholderTextColor={C.muted} style={s.filterInput} returnKeyType="search" />
           {filter ? (
             <Pressable onPress={() => setFilter('')} hitSlop={10} accessibilityRole="button" accessibilityLabel={T('Hapus pencarian')}>

@@ -1,0 +1,22 @@
+:root { color-scheme: dark; --bg:#070b1d; --surface:#10173a; --border:#27305f; --text:#e8ebff; --muted:#9aa3c7; --accent:#8b6dff; --danger:#ff6b81; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: radial-gradient(1200px 600px at 50% -10%, #1b2260 0%, var(--bg) 60%); color: var(--text); font: 15px/1.5 "Segoe UI", system-ui, sans-serif; display: grid; place-items: center; padding: 24px; }
+.card { width: min(480px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 28px; box-shadow: 0 20px 60px rgba(0,0,0,.45); }
+.logo { width: 64px; height: 64px; border-radius: 16px; display: block; margin: 0 auto 14px; }
+h1 { font-size: 22px; margin: 0 0 6px; text-align: center; }
+p { color: var(--muted); margin: 0 0 18px; text-align: center; }
+label { display: block; font-weight: 600; margin-bottom: 6px; }
+input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; }
+input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.hint { color: var(--muted); font-size: 13px; margin-top: 6px; }
+.err { color: var(--danger); min-height: 22px; margin-top: 10px; font-size: 14px; }
+.row { display: flex; gap: 10px; margin-top: 16px; }
+button { flex: 1; padding: 12px 16px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; font-weight: 700; cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: .55; cursor: default; }
+.spin { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: s .8s linear infinite; vertical-align: -2px; margin-right: 8px; }
+@keyframes s { to { transform: rotate(360deg); } }
+code { background: var(--bg); border-radius: 6px; padding: 2px 6px; font-size: 13px; }
+.center { text-align: center; }
+.status { color: var(--muted); min-height: 22px; margin-top: 10px; font-size: 14px; text-align: center; }

@@ -3,7 +3,8 @@
  * File disimpan di folder dokumen aplikasi; indeks metadata di offline/index.json.
  */
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
-import { isOnline, streamUrl } from './api';
+import { Image } from 'expo-image';
+import { isOnline, streamUrl, ytThumb } from './api';
 import { T } from './i18n';
 import type { Track } from './types';
 
@@ -89,6 +90,8 @@ export async function downloadOffline(t: Track) {
     }
     const { available, itemId, ...meta } = t;
     index[t.id] = { uri: file.uri, track: meta, savedAt: Date.now() };
+    // Simpan juga sampulnya agar tetap tampil saat offline
+    const thumb = ytThumb(t.ytId); if (thumb) Image.prefetch(thumb, 'disk').catch(() => {});
   } finally {
     downloading.delete(t.id);
     save();

@@ -197,6 +197,13 @@ YouTube, link dari admin, dan link M3U yang ditambahkan pengguna sendiri (tanggu
   daftar itu sendiri. Bila `/api/tv/meta` sempat gagal (mis. daftar sedang disiapkan), muncul tombol "Coba lagi"
   dan dicoba ulang otomatis.
 
+## Aplikasi Windows
+
+Folder `soundwave-desktop/` berisi aplikasi desktop Windows (Electron) yang membuka SoundWave dari server ini dengan
+fitur sama seperti web, plus tombol media keyboard, ikon tray, tombol di thumbnail taskbar, dan jalankan saat
+Windows menyala. Pakai `SoundWave.exe` dari paket zip, atau buat installer dengan `BUILD-WINDOWS.bat`. Lihat
+`soundwave-desktop/README.md`. Tidak perlu mengubah server.
+
 ## Ganti nama & urutan Pustaka
 
 - Menu ⋮ lagu → **Ganti nama…** mengganti nama file di Google Drive (ekstensi tetap). Tulis `Artis - Judul`

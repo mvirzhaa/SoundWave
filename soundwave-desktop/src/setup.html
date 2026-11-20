@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; script-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SoundWave — Alamat server</title>
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body>
+  <main class="card">
+    <img class="logo" src="../assets/icon.png" alt="">
+    <h1>Selamat datang di SoundWave</h1>
+    <p>Masukkan alamat server SoundWave Anda. Semua fitur sama seperti versi web: pustaka, playlist, radio, TV, Quran, dan unduhan.</p>
+    <form id="f" novalidate>
+      <label for="server">Alamat server</label>
+      <input id="server" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="http://192.168.1.10:3000" autofocus>
+      <div class="hint">Contoh: <code>http://192.168.1.10:3000</code> atau <code>https://musik.kampus.ac.id</code>. Alamat yang sama dengan yang Anda buka di browser.</div>
+      <div class="err" id="err" role="alert"></div>
+      <div class="row">
+        <button type="button" id="back" hidden>Batal</button>
+        <button type="submit" class="primary" id="go">Hubungkan</button>
+      </div>
+    </form>
+  </main>
+  <script src="setup.js"></script>
+</body>
+</html>

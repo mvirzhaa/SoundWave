@@ -186,3 +186,15 @@ src/
   (Pilihan, Indonesia, Dunia, Favorit); di Pilihan/Favorit menyaring daftar itu sendiri lengkap dengan jumlah.
   Daftar negara/kategori dimuat ulang otomatis bila sempat gagal (saat kembali online, saat tab dibuka, atau
   tombol "Coba lagi"). Hanya perubahan JS.
+- **v16 — widget layar utama & perbaikan offline**:
+  - **Widget Android** (tekan lama layar utama → Widget → SoundWave): *Kontrol* (4×1) dan *Daftar Lagu* (4×3,
+    bisa di-scroll). Tombol **Acak, Sebelumnya, Putar/Jeda, Berikutnya, Cari**; ketuk lagu di daftar untuk
+    memutarnya. Urutan daftar mengikuti pilihan "Urutkan" di Pustaka. **Saat offline daftar hanya berisi lagu yang
+    sudah diunduh / ada di HP**, dan tombolnya hanya memutar lagu-lagu itu. "Cari" membuka Pustaka dengan kolom cari
+    siap diketik. Bila aplikasi sedang tidak berjalan, ketukan pertama membuka aplikasi lalu menjalankan perintahnya
+    (Android membatasi pemutaran dari latar belakang). Menambah modul native `react-native-android-widget` →
+    **APK wajib di-build ulang** (`npx expo prebuild --clean`, lalu build seperti biasa / EAS). Titik masuk aplikasi
+    kini `index.js` (mendaftarkan penangan widget).
+  - **Offline**: penanda playlist (lingkaran inisial) tidak lagi hilang — disimpan di HP, begitu juga favorit,
+    genre, judul terakhir, dan sampul lagu yang diunduh; pengumuman memakai salinan terakhir. Penanda diperbarui
+    otomatis saat kembali online.

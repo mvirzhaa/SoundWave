@@ -11,6 +11,7 @@ import { router } from 'expo-router';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { del, get, post } from '../lib/api';
+import { getCached } from '../lib/cache';
 import { C, themed } from '../lib/theme';
 import { T } from '../lib/i18n';
 
@@ -23,7 +24,8 @@ const set = (s: typeof state) => { state = s; subs.forEach((f) => f()); };
 export const useAnnouncements = () => useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => state);
 
 export async function loadAnnouncements() {
-  const r = await get<{ pengumuman: Announcement[]; belumDibaca: number }>('/api/pengumuman', { timeout: 15000 });
+  // Offline → pakai salinan terakhir di HP
+  const { data: r } = await getCached<{ pengumuman: Announcement[]; belumDibaca: number }>('pengumuman', '/api/pengumuman', { timeout: 15000 });
   set({ list: r.pengumuman, unread: r.belumDibaca });
   return r.pengumuman;
 }
